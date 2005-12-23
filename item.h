@@ -16,44 +16,19 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 
 */
 
-#ifndef PUREBACKUP_TREE
-#define PUREBACKUP_TREE
-
-#include <string>
-#include <map>
-#include <vector>
-
-#include "item.h"
+#ifndef PUREBACKUP_ITEM
+#define PUREBACKUP_ITEM
 
 using namespace std;
 
-enum { MTT_VIRTUAL, MTT_FILE, MTT_ITEM, MTT_END, MTT_UNINITTED };
+enum { MTI_LOCAL, MTI_END };
 
-class MountTree {
+class Item {
 public:
+  string name;
   int type;
-  
-  map<string, MountTree> virtual_links;
 
-  string file_source;
-  bool file_scanned;
-  vector<pair<string, MountTree> > file_links;
-
-  string item_fullpath;
-
-  bool checkSanity() const;
-  
-  void print(int indent) const;
-  
-  void scan();
-
-  void dumpItems(vector<Item> *items, string cpath) const;
-
-  MountTree() {
-    type = MTT_UNINITTED;
-  }
+  string local_path;
 };
-
-MountTree *getRoot();
 
 #endif

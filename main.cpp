@@ -93,10 +93,17 @@ void readConfig(const string &conffile) {
 void scanPaths() {
   getRoot()->scan();
   CHECK(getRoot()->checkSanity());
-  printAll();
+  //printAll();
 }
 
 int main() {
   readConfig("purebackup.conf");
   scanPaths();
+  
+  vector<Item> items;
+  getRoot()->dumpItems(&items, "");
+  dprintf("%d items found\n", items.size());
+  
+  for(int i = 0; i < items.size(); i++)
+    printf("%s == %s\n", items[i].name.c_str(), items[i].local_path.c_str());
 }

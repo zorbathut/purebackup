@@ -62,7 +62,9 @@ bool MountTree::checkSanity() const {
   
   if(type == MTT_ITEM) {
     checked = true;
+    CHECK(item_fullpath.size());
   } else {
+    CHECK(item_fullpath.size() == 0);
   }
   
   CHECK(checked);
@@ -136,10 +138,33 @@ void MountTree::scan() {
         } else {
           MountTree mt;
           mt.type = MTT_ITEM;
+          mt.item_fullpath = fils[i].full_path;
           file_links.push_back(make_pair(fils[i].itemname, mt));
         }
       }
     }
+  } else {
+    CHECK(0);
+  }
+}
+
+void MountTree::dumpItems(vector<Item> *items, string cpath) const {
+  if(type == MTT_VIRTUAL) {
+    for(map<string, MountTree>::const_iterator itr = virtual_links.begin(); itr != virtual_links.end(); itr++) {
+      itr->second.dumpItems(items, cpath + "/" + itr->first);
+    }
+  } else if(type == MTT_FILE) {
+    if(file_scanned) {
+      for(int i = 0; i < file_links.size(); i++) {
+        file_links[i].second.dumpItems(items, cpath + "/" + file_links[i].first);
+      }
+    }
+  } else if(type == MTT_ITEM) {
+    Item nit;
+    nit.type = MTI_LOCAL;
+    nit.name = cpath;
+    nit.local_path = item_fullpath;
+    items->push_back(nit);
   } else {
     CHECK(0);
   }
