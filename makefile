@@ -1,5 +1,5 @@
 
-SOURCES = main
+SOURCES = main parse debug
 CPPFLAGS = -DVECTOR_PARANOIA -Wall -Wno-sign-compare -Wno-uninitialized -O2 #-g -pg
 LINKFLAGS = -lcrypt -O2 #-g -pg
 

@@ -16,14 +16,19 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 
 */
 
-#include <string>
+#ifndef PUREBACKUP_DEBUG
+#define PUREBACKUP_DEBUG
 
-using namespace std;
+/*************
+ * CHECK/TEST macros
+ */
+ 
+int dprintf( const char *bort, ... ) __attribute__((format(printf,1,2)));
 
+void CrashHandler();
 
-void readConfig(const string &conffile) {
-}
+void crash() __attribute__((__noreturn__));
+#define CHECK(x) while(1) { if(!(x)) { dprintf("Error at %s:%d - %s\n", __FILE__, __LINE__, #x); CrashHandler(); crash(); } break; }
+#define TEST(x) CHECK(x)
 
-int main() {
-  readConfig("purebackup.conf");
-}
+#endif

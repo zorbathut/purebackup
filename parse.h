@@ -16,14 +16,34 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 
 */
 
+#ifndef PUREBACKUP_PARSE
+#define PUREBACKUP_PARSE
+
+#include <iostream>
 #include <string>
+#include <map>
+#include <vector>
 
 using namespace std;
 
+vector< string > tokenize( const string &in, const string &kar );
+vector< int > sti( const vector< string > &foo );
+  
+class kvData {
+public:
+  
+  string category;
+  map<string, string> kv;
 
-void readConfig(const string &conffile) {
-}
+  string debugOutput() const;
 
-int main() {
-  readConfig("purebackup.conf");
-}
+  string consume(string key);
+  bool isDone() const;
+  void shouldBeDone() const;
+
+};
+
+istream &getLineStripped(istream &ifs, string &out);
+istream &getkvData(istream &ifs, kvData &out);
+
+#endif
