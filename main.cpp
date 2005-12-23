@@ -34,6 +34,35 @@ public:
 
   string file_source;
 
+  bool checkSanity() const {
+    CHECK(type >= 0 && type <= MTT_END);
+    
+    bool checked = false;
+    
+    if(type == MTT_VIRTUAL) {
+      checked = true;
+      for(map<string, MountTree>::const_iterator itr = virtual_links.begin(); itr != virtual_links.end(); itr++) {
+        if(itr->first == "." || itr->first == "..")
+          return false;
+        if(!itr->second.checkSanity())
+          return false;
+      }
+    } else {
+      CHECK(virtual_links.size() == 0);
+    }
+    
+    if(type == MTT_FILE) {
+      checked = true;
+      CHECK(file_source.size());
+    } else {
+      CHECK(file_source.size() == 0);
+    }
+    
+    CHECK(checked);
+    
+    return true;
+  }
+
   MountTree() {
     type = MTT_UNINITTED;
   }
@@ -95,6 +124,9 @@ void readConfig(const string &conffile) {
       CHECK(0);
     }
   }
+  
+  CHECK(mt_root.checkSanity());
+  printf("Sanity checked\n");
 }
 
 int main() {
