@@ -33,6 +33,7 @@ public:
   map<string, MountTree> virtual_links;
 
   string file_source;
+  bool file_scanned;
 
   bool checkSanity() const {
     CHECK(type >= 0 && type <= MTT_END);
@@ -61,6 +62,22 @@ public:
     CHECK(checked);
     
     return true;
+  }
+  
+  void printTree(int indent) const {
+    string spacing(indent, ' ');
+    if(type == MTT_VIRTUAL) {
+      for(map<string, MountTree>::const_iterator itr = virtual_links.begin(); itr != virtual_links.end(); itr++) {
+        printf("%s%s\n", spacing.c_str(), itr->first.c_str());
+        itr->second.printTree(indent + 2);
+      }
+    } else if(type == MTT_FILE) {
+    } else {
+      CHECK(0);
+    }
+  }
+  
+  void scan() {
   }
 
   MountTree() {
@@ -103,10 +120,16 @@ void createMountpoint(const string &loc, const string &type, const string &sourc
   if(type == "file") {
     dpt->type = MTT_FILE;
     dpt->file_source = source;
+    dpt->file_scanned = false;
   } else {
     CHECK(0);
   }
   
+}
+
+void printAll() {
+  printf("ROOT\n");
+  mt_root.printTree(2);
 }
 
 void readConfig(const string &conffile) {
@@ -127,8 +150,15 @@ void readConfig(const string &conffile) {
   
   CHECK(mt_root.checkSanity());
   printf("Sanity checked\n");
+  printAll();
+}
+
+void scanPaths() {
+  mt_root.scan();
+  printAll();
 }
 
 int main() {
   readConfig("purebackup.conf");
+  scanPaths();
 }
