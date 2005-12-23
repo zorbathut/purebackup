@@ -34,7 +34,10 @@ void crash() {
 }
 
 void outputDebugString(const char *in) {
-  printf("%s\n", in);
+  if(in[strlen(in) - 1] == '\n')
+    printf("%s", in);
+  else
+    printf("%s\n", in);
 }
 
 int dprintf( const char *bort, ... ) {
@@ -49,9 +52,8 @@ int dprintf( const char *bort, ... ) {
       buf.resize( buf.size() * 2 );
     va_start( args, bort );
     done = vsnprintf( &(buf[ 0 ]), buf.size() - 1,  bort, args );
-    assert( done < (int)buf.size() );
     va_end( args );
-  } while( done == buf.size() - 1 || done == -1);
+  } while( done >= buf.size() - 1 || done == -1);
 
   assert( done < (int)buf.size() );
 
