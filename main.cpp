@@ -18,79 +18,17 @@
 
 #include "parse.h"
 #include "debug.h"
+#include "tree.h"
 
 #include <string>
 #include <fstream>
 
 using namespace std;
 
-enum { MTT_VIRTUAL, MTT_FILE, MTT_END, MTT_UNINITTED };
-
-class MountTree {
-public:
-  int type;
-  
-  map<string, MountTree> virtual_links;
-
-  string file_source;
-  bool file_scanned;
-
-  bool checkSanity() const {
-    CHECK(type >= 0 && type <= MTT_END);
-    
-    bool checked = false;
-    
-    if(type == MTT_VIRTUAL) {
-      checked = true;
-      for(map<string, MountTree>::const_iterator itr = virtual_links.begin(); itr != virtual_links.end(); itr++) {
-        if(itr->first == "." || itr->first == "..")
-          return false;
-        if(!itr->second.checkSanity())
-          return false;
-      }
-    } else {
-      CHECK(virtual_links.size() == 0);
-    }
-    
-    if(type == MTT_FILE) {
-      checked = true;
-      CHECK(file_source.size());
-    } else {
-      CHECK(file_source.size() == 0);
-    }
-    
-    CHECK(checked);
-    
-    return true;
-  }
-  
-  void printTree(int indent) const {
-    string spacing(indent, ' ');
-    if(type == MTT_VIRTUAL) {
-      for(map<string, MountTree>::const_iterator itr = virtual_links.begin(); itr != virtual_links.end(); itr++) {
-        printf("%s%s\n", spacing.c_str(), itr->first.c_str());
-        itr->second.printTree(indent + 2);
-      }
-    } else if(type == MTT_FILE) {
-    } else {
-      CHECK(0);
-    }
-  }
-  
-  void scan() {
-  }
-
-  MountTree() {
-    type = MTT_UNINITTED;
-  }
-};
-
-MountTree mt_root;
-
 // Makes sure everything up to this is virtual
 MountTree *getMountpointLocation(const string &loc) {
   const char *tpt = loc.c_str();
-  MountTree *cpos = &mt_root;
+  MountTree *cpos = getRoot();
   while(*tpt) {
     CHECK(*tpt == '/');
     tpt++;
@@ -129,13 +67,13 @@ void createMountpoint(const string &loc, const string &type, const string &sourc
 
 void printAll() {
   printf("ROOT\n");
-  mt_root.printTree(2);
+  getRoot()->print(2);
 }
 
 void readConfig(const string &conffile) {
   // First we init root
   {
-    mt_root.type = MTT_UNINITTED;
+    getRoot()->type = MTT_UNINITTED;
   }
   
   ifstream ifs(conffile.c_str());
@@ -148,13 +86,13 @@ void readConfig(const string &conffile) {
     }
   }
   
-  CHECK(mt_root.checkSanity());
-  printf("Sanity checked\n");
+  CHECK(getRoot()->checkSanity());
   printAll();
 }
 
 void scanPaths() {
-  mt_root.scan();
+  getRoot()->scan();
+  CHECK(getRoot()->checkSanity());
   printAll();
 }
 
