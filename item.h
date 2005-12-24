@@ -19,7 +19,16 @@
 #ifndef PUREBACKUP_ITEM
 #define PUREBACKUP_ITEM
 
+#include <string>
+
 using namespace std;
+
+class Checksum {
+public:
+  unsigned char bytes[20];
+};
+
+bool operator==(const Checksum &lhs, const Checksum &rhs);
 
 enum { MTI_LOCAL, MTI_END };
 
@@ -27,8 +36,19 @@ class Item {
 public:
   string name;
   int type;
+  long long size;
+  long long timestamp;
 
   string local_path;
+
+  Checksum checksum();
+
+  Checksum cs;
+  bool cs_valid;
+
+  Item() {
+    cs_valid = false;
+  }
 };
 
 #endif

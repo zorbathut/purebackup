@@ -1,7 +1,7 @@
 
 SOURCES = main parse debug tree item
 CPPFLAGS = -DVECTOR_PARANOIA -Wall -Wno-sign-compare -Wno-uninitialized -O2 #-g -pg
-LINKFLAGS = -lcrypt -O2 #-g -pg
+LINKFLAGS = -lcrypto -O2 #-g -pg
 
 CPP = g++
 

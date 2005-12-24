@@ -97,6 +97,8 @@ public:
   bool directory;
   string full_path;
   string itemname;
+  long long size; // -1 if unknown
+  long long timestamp; // -1 if unknown
 };
 
 vector<DirListOut> getDirList(const string &path) {
@@ -113,6 +115,8 @@ vector<DirListOut> getDirList(const string &path) {
     dlo.directory = stt.st_mode & S_IFDIR;
     dlo.full_path = path + "/" + dire->d_name;
     dlo.itemname = dire->d_name;
+    dlo.size = stt.st_size;
+    dlo.timestamp = stt.st_mtime;
     rv.push_back(dlo);
   }
   return rv;
@@ -139,6 +143,8 @@ void MountTree::scan() {
           MountTree mt;
           mt.type = MTT_ITEM;
           mt.item_fullpath = fils[i].full_path;
+          mt.item_size = fils[i].size;
+          mt.item_timestamp = fils[i].timestamp;
           file_links.push_back(make_pair(fils[i].itemname, mt));
         }
       }
@@ -163,6 +169,8 @@ void MountTree::dumpItems(vector<Item> *items, string cpath) const {
     Item nit;
     nit.type = MTI_LOCAL;
     nit.name = cpath;
+    nit.size = item_size;
+    nit.timestamp = item_timestamp;
     nit.local_path = item_fullpath;
     items->push_back(nit);
   } else {

@@ -40,6 +40,8 @@ public:
   vector<pair<string, MountTree> > file_links;
 
   string item_fullpath;
+  long long item_size;  // -1 if unknown
+  long long item_timestamp; // -1 if unknown
 
   bool checkSanity() const;
   

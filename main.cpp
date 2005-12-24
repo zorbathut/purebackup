@@ -96,14 +96,88 @@ void scanPaths() {
   //printAll();
 }
 
+enum { SRC_PRESERVE, SRC_APPEND, SRC_COPYFROM, SRC_NEW };
+
+class Source {
+public:
+  int type;
+  
+  Item *link; // what to append from for SRC_APPEND, what to copy from for SRC_COPYFROM
+};
+
 int main() {
   readConfig("purebackup.conf");
   scanPaths();
   
-  vector<Item> items;
-  getRoot()->dumpItems(&items, "");
-  dprintf("%d items found\n", items.size());
+  vector<Item> realitems;
+  getRoot()->dumpItems(&realitems, "");
+  dprintf("%d items found\n", realitems.size());
   
-  for(int i = 0; i < items.size(); i++)
-    printf("%s == %s\n", items[i].name.c_str(), items[i].local_path.c_str());
+  for(int i = 0; i < realitems.size(); i++) {
+    CHECK(realitems[i].size >= 0);
+    CHECK(realitems[i].timestamp >= 0);
+  }
+  
+  //for(int i = 0; i < realitems.size(); i++)
+    //printf("%s == %s, %lld\n", realitems[i].name.c_str(), realitems[i].local_path.c_str(), realitems[i].size);
+  
+  // Here we read in the file of existing data
+  vector<Item> origitems;
+  
+  map<long long, vector<Item *> > sizelinks;
+  //map<string, Item *> orignamelinks;
+  
+  //for(int i = 0; i < origitems.size(); i++)
+    //orignamelinks[origitems[i].name] = &origitems[i];
+  
+  vector<Source> sources; // This parallels realitems
+
+  for(int i = 0; i < realitems.size(); i++) {
+    bool got = false;
+    
+    // First, we check to see if it's the same file as is in origitems
+    if(!got) {
+    }
+    
+    // Then, we check to see if it's the same file only appended to
+    if(!got) {
+    }
+    
+    // Next we see if we can copy it from any existing place
+    if(!got) {
+      const vector<Item *> &sli = sizelinks[realitems[i].size];
+      for(int k = 0; k < sli.size(); k++) {
+        CHECK(realitems[i].size == sli[k]->size);
+        printf("Comparing %s and %s\n", realitems[i].local_path.c_str(), sli[k]->local_path.c_str());
+        if(realitems[i].checksum() == sli[k]->checksum()) {
+          Source src;
+          src.type = SRC_COPYFROM;
+          src.link = sli[k];
+          sources.push_back(src);
+          got = true;
+          break;
+        }
+      }
+    }
+    
+    // Then, as a last resort, we simply copy it from its current location.
+    if(!got) {
+      Source src;
+      src.type = SRC_NEW;
+      sources.push_back(src);
+      got = true;
+    }
+    
+    CHECK(got);
+    sizelinks[realitems[i].size].push_back(&realitems[i]);
+  }
+  
+  
+  
+  /*
+  for(int i = 0; i < sources.size(); i++) {
+    if(sources[i].type == 2)
+      printf("%s equals %s\n", realitems[i].local_path.c_str(), sources[i].link->local_path.c_str());
+  }*/
+
 }
