@@ -16,34 +16,20 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 
 */
 
-#ifndef PUREBACKUP_ITEM
-#define PUREBACKUP_ITEM
-
-#include <string>
-#include <vector>
-
 #include "util.h"
 
-using namespace std;
+long long atoll(const char *in) {
+  long long foo;
+  sscanf(in, "%lld", &foo);
+  return foo;
+}
 
-enum { MTI_ORIGINAL, MTI_LOCAL, MTI_END };
-
-class Item {
-public:
-  string name;
-  int type;
-  long long size;
-  long long timestamp;
-
-  string local_path;
-
-  Checksum checksum() const;
-  Checksum checksumPart(int len) const;
-
-  void setTotalChecksum(const Checksum &chs);
-
-private:
-  mutable vector<pair<int, Checksum> > css;
-};
-
-#endif
+Checksum atochecksum(const char *in) {
+  Checksum cs;
+  for(int i = 0; i < 20; i++) {
+    int k;
+    sscanf(string(in + i * 2, in + i * 2 + i).c_str(), "%x", &k);
+    cs.bytes[i] = k;
+  }
+  return cs;
+}

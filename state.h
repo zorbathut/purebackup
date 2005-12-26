@@ -16,34 +16,36 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 
 */
 
-#ifndef PUREBACKUP_ITEM
-#define PUREBACKUP_ITEM
+#ifndef PUREBACKUP_STATE
+#define PUREBACKUP_STATE
 
-#include <string>
-#include <vector>
+#include "item.h"
 
-#include "util.h"
+#include <map>
 
 using namespace std;
 
-enum { MTI_ORIGINAL, MTI_LOCAL, MTI_END };
+enum { SRC_PRESERVE, SRC_APPEND, SRC_COPYFROM, SRC_NEW };
 
-class Item {
+class Source {
 public:
-  string name;
   int type;
-  long long size;
-  long long timestamp;
+  
+  Item *link; // what to append from for SRC_APPEND, what to copy from for SRC_COPYFROM
+};
 
-  string local_path;
-
-  Checksum checksum() const;
-  Checksum checksumPart(int len) const;
-
-  void setTotalChecksum(const Checksum &chs);
-
+class State {
 private:
-  mutable vector<pair<int, Checksum> > css;
+  
+  map<string, Item> items;
+
+public:
+  
+  void readFile(const string &fil);
+
+  void process(const Item &dst, const Source &in);
+
+  void writeOut(const string &fil) const;
 };
 
 #endif

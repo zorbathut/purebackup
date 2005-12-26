@@ -17,18 +17,41 @@
 */
 
 #include "item.h"
+#include "debug.h"
 
 #include <openssl/sha.h>
+
+string Checksum::toString() const {
+  string ostr;
+  for(int i = 0; i < 20; i++) {
+    char bf[8];
+    sprintf(bf, "%02x", bytes[i]);
+    ostr += bf;
+  }
+  return ostr;
+}
 
 bool operator==(const Checksum &lhs, const Checksum &rhs) {
   return !memcmp(lhs.bytes, rhs.bytes, sizeof(lhs.bytes));
 }
 
-Checksum Item::checksum() {
-  if(cs_valid)
-    return cs;
+Checksum Item::checksum() const {
+  return checksumPart(size);
+}
+
+Checksum Item::checksumPart(int len) const {
+  bool gottotal = false;
+  for(int i = 0; i < css.size(); i++) {
+    if(css[i].first == len)
+      return css[i].second;
+    if(css[i].first == size)
+      gottotal = true;
+  }
   
-  printf("Checksumming %s\n", local_path.c_str());
+  if(len == size)
+    gottotal = true;
+  
+  int bytu = 0;
   
   SHA_CTX c;
   SHA1_Init(&c);
@@ -36,14 +59,33 @@ Checksum Item::checksum() {
   while(1) {
     char buf[1024*128];
     int rv = fread(buf, 1, sizeof(buf), phil);
-    printf("%d bytes\n", rv);
-    SHA1_Update(&c, buf, rv);
-    if(rv != sizeof(buf))
-      break;
+    
+    if(bytu + rv >= len) {
+      SHA1_Update(&c, buf, len - bytu);
+      Checksum tcs;
+      SHA1_Final(tcs.bytes, &c);
+      css.push_back(make_pair(len, tcs));
+      if(gottotal) {
+        fclose(phil);
+        return tcs;
+      }
+      SHA1_Update(&c, buf + (len - bytu), rv - (len - bytu));
+      len = size;
+      gottotal = true;
+    } else {
+      SHA1_Update(&c, buf, rv);
+    }
+    bytu += rv;
+    if(rv != sizeof(buf)) {
+      CHECK(0);
+    }
   }
-  SHA1_Final(cs.bytes, &c);
-  fclose(phil);
   
-  cs_valid = true;
-  return cs;
+  CHECK(0);
+}
+
+void Item::setTotalChecksum(const Checksum &chs) {
+  CHECK(type == MTI_ORIGINAL);
+  CHECK(css.size() == 0);
+  css.push_back(make_pair(size, chs));
 }

@@ -19,6 +19,7 @@
 #include "parse.h"
 #include "debug.h"
 #include "tree.h"
+#include "state.h"
 
 #include <string>
 #include <fstream>
@@ -96,15 +97,6 @@ void scanPaths() {
   //printAll();
 }
 
-enum { SRC_PRESERVE, SRC_APPEND, SRC_COPYFROM, SRC_NEW };
-
-class Source {
-public:
-  int type;
-  
-  Item *link; // what to append from for SRC_APPEND, what to copy from for SRC_COPYFROM
-};
-
 int main() {
   readConfig("purebackup.conf");
   scanPaths();
@@ -118,8 +110,8 @@ int main() {
     CHECK(realitems[i].timestamp >= 0);
   }
   
-  //for(int i = 0; i < realitems.size(); i++)
-    //printf("%s == %s, %lld\n", realitems[i].name.c_str(), realitems[i].local_path.c_str(), realitems[i].size);
+  State origstate;
+  origstate.readFile("state0");
   
   // Here we read in the file of existing data
   vector<Item> origitems;
@@ -172,12 +164,31 @@ int main() {
     sizelinks[realitems[i].size].push_back(&realitems[i]);
   }
   
+  // Here is where we would search for deleted files
+
+  {
+    int same = 0;
+    int append = 0;
+    int copy = 0;
+    int create = 0;
+    int del = 0;
+    for(int i = 0; i < sources.size(); i++) {
+      if(sources[i].type == SRC_PRESERVE)
+        same++;
+      if(sources[i].type == SRC_APPEND)
+        append++;
+      if(sources[i].type == SRC_COPYFROM)
+        copy++;
+      if(sources[i].type == SRC_NEW)
+        create++;
+    }
+    printf("%d preserved, %d appended, %d copied, %d new, %d deleted\n", same, append, copy, create, del);
+  }
   
+  State stt;
+  for(int i = 0; i < sources.size(); i++)
+    stt.process(realitems[i], sources[i]);
   
-  /*
-  for(int i = 0; i < sources.size(); i++) {
-    if(sources[i].type == 2)
-      printf("%s equals %s\n", realitems[i].local_path.c_str(), sources[i].link->local_path.c_str());
-  }*/
+  stt.writeOut("state1");
 
 }

@@ -1,5 +1,5 @@
 
-SOURCES = main parse debug tree item
+SOURCES = main parse debug tree item state util
 CPPFLAGS = -DVECTOR_PARANOIA -Wall -Wno-sign-compare -Wno-uninitialized -O2 #-g -pg
 LINKFLAGS = -lcrypto -O2 #-g -pg
 
