@@ -117,7 +117,6 @@ int main() {
   vector<Item> origitems;
   
   map<long long, vector<Item *> > sizelinks;
-  //map<string, Item *> orignamelinks;
   
   //for(int i = 0; i < origitems.size(); i++)
     //orignamelinks[origitems[i].name] = &origitems[i];
@@ -129,6 +128,13 @@ int main() {
     
     // First, we check to see if it's the same file as is in origitems
     if(!got) {
+      const Item *it = origstate.findItem(realitems[i].name);
+      if(it && it->size == realitems[i].size && it->timestamp == realitems[i].timestamp) {
+        Source src;
+        src.type = SRC_PRESERVE;
+        sources.push_back(src);
+        got = true;
+      }
     }
     
     // Then, we check to see if it's the same file only appended to
@@ -140,7 +146,6 @@ int main() {
       const vector<Item *> &sli = sizelinks[realitems[i].size];
       for(int k = 0; k < sli.size(); k++) {
         CHECK(realitems[i].size == sli[k]->size);
-        printf("Comparing %s and %s\n", realitems[i].local_path.c_str(), sli[k]->local_path.c_str());
         if(realitems[i].checksum() == sli[k]->checksum()) {
           Source src;
           src.type = SRC_COPYFROM;
@@ -177,18 +182,24 @@ int main() {
         same++;
       if(sources[i].type == SRC_APPEND)
         append++;
-      if(sources[i].type == SRC_COPYFROM)
+      if(sources[i].type == SRC_COPYFROM) {
+        printf("Copying %s from %s\n", realitems[i].name.c_str(), sources[i].link->name.c_str());
         copy++;
-      if(sources[i].type == SRC_NEW)
+      }
+      if(sources[i].type == SRC_NEW) {
+        printf("Creating %s\n", realitems[i].name.c_str());
         create++;
+      }
     }
     printf("%d preserved, %d appended, %d copied, %d new, %d deleted\n", same, append, copy, create, del);
   }
   
-  State stt;
+  State newstate = origstate;
+  
+  /*State stt;
   for(int i = 0; i < sources.size(); i++)
     stt.process(realitems[i], sources[i]);
   
-  stt.writeOut("state1");
+  stt.writeOut("state1");*/
 
 }

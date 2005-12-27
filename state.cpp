@@ -43,7 +43,13 @@ void State::readFile(const string &fil) {
     }
   }
 }
-  
+
+const Item *State::findItem(const string &name) const {
+  if(items.count(name))
+    return &items.find(name)->second;
+  return NULL;
+}
+
 void State::process(const Item &dst, const Source &in) {
   if(in.type == SRC_PRESERVE) {
     CHECK(items.count(dst.name));

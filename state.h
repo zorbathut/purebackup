@@ -43,9 +43,11 @@ public:
   
   void readFile(const string &fil);
 
+  const Item *findItem(const string &name) const;
   void process(const Item &dst, const Source &in);
 
   void writeOut(const string &fil) const;
+
 };
 
 #endif
