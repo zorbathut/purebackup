@@ -23,6 +23,7 @@
 
 #include <string>
 #include <fstream>
+#include <set>
 
 using namespace std;
 
@@ -105,11 +106,83 @@ int main() {
   getRoot()->dumpItems(&realitems, "");
   dprintf("%d items found\n", realitems.size());
   
+  State origstate;
+  origstate.readFile("state0");
+  
+  map<pair<bool, string>, Item> citem;
+  map<long long, vector<pair<bool, string> > > citemsizemap;
+  set<string> ftc;
+  
   for(map<string, Item>::iterator itr = realitems.begin(); itr != realitems.end(); itr++) {
     CHECK(itr->second.size >= 0);
     CHECK(itr->second.timestamp >= 0);
+    ftc.insert(itr->first);
   }
   
+  for(map<string, Item>::const_iterator itr = origstate.getItemDb().begin(); itr != origstate.getItemDb().end(); itr++) {
+    CHECK(itr->second.size >= 0);
+    CHECK(itr->second.timestamp >= 0);
+    CHECK(citem.count(make_pair(false, itr->first)) == 0);
+    citem[make_pair(false, itr->first)] = itr->second;
+    citemsizemap[itr->second.size].push_back(make_pair(false, itr->first));
+    ftc.insert(itr->first);
+  }
+  
+  // FTC is the union of the files in realitems and origstate
+  // citem is the items that we can look at
+  // citemsizemap is the same, only organized by size
+  for(set<string>::iterator itr = ftc.begin(); itr != ftc.end(); itr++) {
+    if(realitems.count(*itr)) {
+      const Item &ite = realitems.find(*itr)->second;
+      bool got = false;
+      
+      // First, we check to see if it's the same file as existed before
+      if(!got && citem.count(make_pair(false, *itr))) {
+        const Item &pite = citem.find(make_pair(false, *itr))->second;
+        if(ite.size == pite.size && ite.timestamp == pite.timestamp) {
+          // It's identical!
+          printf("Preserve file %s\n", itr->c_str());
+          got = true;
+        } else if(ite.size == pite.size && ite.checksum() == pite.checksum()) {
+          // It's touched!
+          printf("Update timestamp %s\n", itr->c_str());
+          got = true;
+        } else if(ite.size > pite.size && ite.checksumPart(pite.size) == pite.checksum()) {
+          // It's appended!
+          printf("Appendination on %s, dude!\n", itr->c_str());
+          got = true;
+        }
+      }
+      
+      // Okay, now we see if it's been copied from somewhere
+      if(!got) {
+        const vector<pair<bool, string> > &sli = citemsizemap[ite.size];
+        for(int k = 0; k < sli.size(); k++) {
+          CHECK(ite.size == citem[sli[k]].size);
+          if(ite.checksum() == citem[sli[k]].checksum()) {
+            printf("Holy crapcock! Copying %s from %s:%d! MADNESS\n", itr->c_str(), sli[k].second.c_str(), sli[k].first);
+            got = true;
+          }
+        }
+      }
+      
+      // And now we give up and just create it
+      if(!got) {
+        printf("Creating %s from GALACTIC ETHER\n", itr->c_str());
+        got = true;
+      }
+      
+      CHECK(got);
+      
+      citem[make_pair(true, *itr)] = ite;
+      citemsizemap[ite.size].push_back(make_pair(true, *itr));
+      
+    } else {
+      CHECK(citem.count(make_pair(false, *itr)));
+      printf("Delete file %s\n", itr->c_str());
+    }
+  }
+
   /*
   State origstate;
   origstate.readFile("state0");
@@ -206,7 +279,7 @@ int main() {
   for(int i = 0; i < sources.size(); i++)
     newstate.process(realitems[i], sources[i]);
   
-  /*State stt;
+  State stt;
   for(int i = 0; i < sources.size(); i++)
     stt.process(realitems[i], sources[i]);
   

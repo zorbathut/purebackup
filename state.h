@@ -34,6 +34,7 @@ public:
   
   void readFile(const string &fil);
 
+  const map<string, Item> &getItemDb() const;
   const Item *findItem(const string &name) const;
 
   void writeOut(const string &fil) const;

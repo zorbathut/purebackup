@@ -44,6 +44,10 @@ void State::readFile(const string &fil) {
   }
 }
 
+const map<string, Item> &State::getItemDb() const {
+  return items;
+}
+
 const Item *State::findItem(const string &name) const {
   if(items.count(name))
     return &items.find(name)->second;
