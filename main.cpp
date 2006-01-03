@@ -98,6 +98,91 @@ void scanPaths() {
   //printAll();
 }
 
+enum { TYPE_CREATE, TYPE_DELETE, TYPE_COPY, TYPE_APPEND, TYPE_STORE, TYPE_END };
+string type_strs[] = { "CREATE", "DELETE", "COPY", "APPEND", "STORE" };
+
+class Instruction {
+public:
+  vector<pair<bool, string> > depends;
+  vector<pair<bool, string> > removes;
+  vector<pair<bool, string> > creates;
+
+  int type;
+
+  string textout() const;
+};
+
+void dumpa(string *str, const string &txt, const vector<pair<bool, string> > &vek) {
+  *str += "  " + txt + "\n";
+  for(int i = 0; i < vek.size(); i++)
+    *str += StringPrintf("    %d:%s\n", vek[i].first, vek[i].second.c_str());
+}
+
+string Instruction::textout() const {
+  string rvx;
+  CHECK(type >= 0 && type < TYPE_END);
+  rvx = type_strs[type] + "\n";
+  dumpa(&rvx, "Depends:", depends);
+  dumpa(&rvx, "Removes:", removes);
+  dumpa(&rvx, "Creates:", creates);
+  return rvx;
+}
+
+vector<Instruction> sortInst(const vector<Instruction> &oinst) {
+  vector<Instruction> buckets[TYPE_END];
+  map<pair<bool, string>, int> leftToUse;
+  for(int i = 0; i < oinst.size(); i++) {
+    CHECK(oinst[i].type >= 0 && oinst[i].type < TYPE_END);
+    buckets[oinst[i].type].push_back(oinst[i]);
+    for(int j = 0; j < oinst[i].depends.size(); j++)
+      leftToUse[oinst[i].depends[j]]++;
+  }
+  CHECK(buckets[0].size() == 1);
+  
+  set<pair<bool, string> > live;
+
+  vector<Instruction> kinstr;
+  
+  while(1) {
+    int tcl = 0;
+    for(int i = 0; i < TYPE_END; i++)
+      tcl += buckets[i].size();
+    if(!tcl)
+      break;
+    printf("Starting pass, %d instructions left\n", tcl);
+    for(int i = 0; i < TYPE_END; i++) {
+      for(int j = 0; j < buckets[i].size(); j++) {
+        bool good = true;
+        for(int k = 0; good && k < buckets[i][j].depends.size(); k++)
+          if(!live.count(buckets[i][j].depends[k]))
+            good = false;
+        for(int k = 0; good && k < buckets[i][j].removes.size(); k++)
+          if(!(leftToUse[buckets[i][j].removes[k]] == 0 || leftToUse[buckets[i][j].removes[k]] == 1 && count(buckets[i][j].depends.begin(), buckets[i][j].depends.end(), buckets[i][j].removes[k])))
+            good = false;
+        if(!good)
+          continue;
+        //dprintf("%s\n", buckets[i][j].textout().c_str());
+        for(int k = 0; k < buckets[i][j].depends.size(); k++)
+          leftToUse[buckets[i][j].depends[k]]--;
+        for(int k = 0; k < buckets[i][j].removes.size(); k++) {
+          CHECK(live.count(buckets[i][j].removes[k]));
+          live.erase(buckets[i][j].removes[k]);
+        }
+        for(int k = 0; k < buckets[i][j].creates.size(); k++) {
+          pair<bool, string> ite = buckets[i][j].creates[k];
+          CHECK(!live.count(ite));
+          live.insert(buckets[i][j].creates[k]);
+        }
+        kinstr.push_back(buckets[i][j]);
+        buckets[i].erase(buckets[i].begin() + j);
+        j--;
+      }
+    }
+  }
+
+  return kinstr;
+}
+
 int main() {
   readConfig("purebackup.conf");
   scanPaths();
@@ -113,6 +198,11 @@ int main() {
   map<long long, vector<pair<bool, string> > > citemsizemap;
   set<string> ftc;
   
+  Instruction fi;
+  fi.type = TYPE_CREATE;
+  
+  vector<Instruction> inst;
+  
   for(map<string, Item>::iterator itr = realitems.begin(); itr != realitems.end(); itr++) {
     CHECK(itr->second.size >= 0);
     CHECK(itr->second.timestamp >= 0);
@@ -125,6 +215,7 @@ int main() {
     CHECK(citem.count(make_pair(false, itr->first)) == 0);
     citem[make_pair(false, itr->first)] = itr->second;
     citemsizemap[itr->second.size].push_back(make_pair(false, itr->first));
+    fi.creates.push_back(make_pair(false, itr->first));
     ftc.insert(itr->first);
   }
   
@@ -142,14 +233,22 @@ int main() {
         if(ite.size == pite.size && ite.timestamp == pite.timestamp) {
           // It's identical!
           printf("Preserve file %s\n", itr->c_str());
+          fi.creates.push_back(make_pair(true, *itr));
           got = true;
         } else if(ite.size == pite.size && ite.checksum() == pite.checksum()) {
-          // It's touched!
-          printf("Update timestamp %s\n", itr->c_str());
+          // It's touched! But we currently don't care!
+          printf("Preserve file %s\n", itr->c_str());
+          fi.creates.push_back(make_pair(true, *itr));
           got = true;
         } else if(ite.size > pite.size && ite.checksumPart(pite.size) == pite.checksum()) {
           // It's appended!
           printf("Appendination on %s, dude!\n", itr->c_str());
+          Instruction ti;
+          ti.type = TYPE_APPEND;
+          ti.creates.push_back(make_pair(true, *itr));
+          ti.depends.push_back(make_pair(false, *itr));
+          ti.removes.push_back(make_pair(false, *itr));
+          inst.push_back(ti);
           got = true;
         }
       }
@@ -161,7 +260,15 @@ int main() {
           CHECK(ite.size == citem[sli[k]].size);
           if(ite.checksum() == citem[sli[k]].checksum()) {
             printf("Holy crapcock! Copying %s from %s:%d! MADNESS\n", itr->c_str(), sli[k].second.c_str(), sli[k].first);
+            Instruction ti;
+            ti.type = TYPE_COPY;
+            ti.creates.push_back(make_pair(true, *itr));
+            ti.depends.push_back(sli[k]);
+            if(citem.count(make_pair(false, *itr)))
+              ti.removes.push_back(make_pair(false, *itr));
+            inst.push_back(ti);
             got = true;
+            break;
           }
         }
       }
@@ -169,6 +276,12 @@ int main() {
       // And now we give up and just create it
       if(!got) {
         printf("Creating %s from GALACTIC ETHER\n", itr->c_str());
+        Instruction ti;
+        ti.type = TYPE_STORE;
+        ti.creates.push_back(make_pair(true, *itr));
+        if(citem.count(make_pair(false, *itr)))
+          ti.removes.push_back(make_pair(false, *itr));
+        inst.push_back(ti);
         got = true;
       }
       
@@ -180,109 +293,15 @@ int main() {
     } else {
       CHECK(citem.count(make_pair(false, *itr)));
       printf("Delete file %s\n", itr->c_str());
+      Instruction ti;
+      ti.type = TYPE_DELETE;
+      ti.removes.push_back(make_pair(false, *itr));
+      inst.push_back(ti);
     }
   }
-
-  /*
-  State origstate;
-  origstate.readFile("state0");
   
-  // Here we read in the file of existing data
-  vector<Item> origitems;
+  inst.push_back(fi);
   
-  map<long long, vector<Item *> > sizelinks;
-  
-  //for(int i = 0; i < origitems.size(); i++)
-    //orignamelinks[origitems[i].name] = &origitems[i];
-  
-  vector<Instruction> sources;
-
-  for(int i = 0; i < realitems.size(); i++) {
-    bool got = false;
-    
-    // First, we check to see if it's the same file as is in origitems
-    if(!got) {
-      const Item *it = origstate.findItem(realitems[i].name);
-      if(it && it->size == realitems[i].size && it->timestamp == realitems[i].timestamp) {
-        Source src;
-        src.type = SRC_PRESERVE;
-        sources.push_back(src);
-        got = true;
-      }
-    }
-    
-    // Then, we check to see if it's the same file only appended to
-    if(!got) {
-      const Item *it = origstate.findItem(realitems[i].name);
-      if(it && it->size < realitems[i].size && realitems[i].checksumPart(it->size) == it->checksum()) {
-        Source src;
-        src.type = SRC_APPEND;
-        sources.push_back(src);
-        got = true;
-      }
-    }
-    
-    // Next we see if we can copy it from any existing place
-    if(!got) {
-      const vector<Item *> &sli = sizelinks[realitems[i].size];
-      for(int k = 0; k < sli.size(); k++) {
-        CHECK(realitems[i].size == sli[k]->size);
-        if(realitems[i].checksum() == sli[k]->checksum()) {
-          Source src;
-          src.type = SRC_COPYFROM;
-          src.link = sli[k];
-          sources.push_back(src);
-          got = true;
-          break;
-        }
-      }
-    }
-    
-    // Then, as a last resort, we simply copy it from its current location.
-    if(!got) {
-      Source src;
-      src.type = SRC_NEW;
-      sources.push_back(src);
-      got = true;
-    }
-    
-    CHECK(got);
-    sizelinks[realitems[i].size].push_back(&realitems[i]);
-  }
-  
-  // Here is where we would search for deleted files
-
-  {
-    int same = 0;
-    int append = 0;
-    int copy = 0;
-    int create = 0;
-    int del = 0;
-    for(int i = 0; i < sources.size(); i++) {
-      if(sources[i].type == SRC_PRESERVE)
-        same++;
-      if(sources[i].type == SRC_APPEND)
-        append++;
-      if(sources[i].type == SRC_COPYFROM) {
-        printf("Copying %s from %s\n", realitems[i].name.c_str(), sources[i].link->name.c_str());
-        copy++;
-      }
-      if(sources[i].type == SRC_NEW) {
-        printf("Creating %s\n", realitems[i].name.c_str());
-        create++;
-      }
-    }
-    printf("%d preserved, %d appended, %d copied, %d new, %d deleted\n", same, append, copy, create, del);
-  }
-  
-  State newstate = origstate;
-  for(int i = 0; i < sources.size(); i++)
-    newstate.process(realitems[i], sources[i]);
-  
-  State stt;
-  for(int i = 0; i < sources.size(); i++)
-    stt.process(realitems[i], sources[i]);
-  
-  stt.writeOut("state1");*/
+  inst = sortInst(inst);
 
 }

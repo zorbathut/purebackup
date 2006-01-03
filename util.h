@@ -35,4 +35,6 @@ bool operator==(const Checksum &lhs, const Checksum &rhs);
 long long atoll(const char *);
 Checksum atochecksum(const char *);
 
+string StringPrintf( const char *bort, ... ) __attribute__((format(printf,1,2)));
+
 #endif

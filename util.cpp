@@ -17,6 +17,13 @@
 */
 
 #include "util.h"
+#include "debug.h"
+
+#include <stdarg.h>
+
+#include <vector>
+
+using namespace std;
 
 long long atoll(const char *in) {
   long long foo;
@@ -33,3 +40,23 @@ Checksum atochecksum(const char *in) {
   }
   return cs;
 }
+
+string StringPrintf( const char *bort, ... ) {
+
+  static vector< char > buf(2);
+  va_list args;
+
+  int done = 0;
+  do {
+    if( done )
+      buf.resize( buf.size() * 2 );
+    va_start( args, bort );
+    done = vsnprintf( &(buf[ 0 ]), buf.size() - 1,  bort, args );
+    va_end( args );
+  } while( done >= buf.size() - 1 || done == -1);
+
+  CHECK( done < (int)buf.size() );
+
+  return string(buf.begin(), buf.begin() + done);
+
+};
