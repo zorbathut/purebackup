@@ -26,11 +26,10 @@
 
 using namespace std;
 
-enum { MTI_ORIGINAL, MTI_LOCAL, MTI_END };
+enum { MTI_ORIGINAL, MTI_LOCAL, MTI_NONEXISTENT, MTI_END };
 
 class Item {
 public:
-  string name;
   int type;
   long long size;
   long long timestamp;

@@ -25,15 +25,6 @@
 
 using namespace std;
 
-enum { SRC_PRESERVE, SRC_APPEND, SRC_COPYFROM, SRC_NEW };
-
-class Source {
-public:
-  int type;
-  
-  Item *link; // what to append from for SRC_APPEND, what to copy from for SRC_COPYFROM
-};
-
 class State {
 private:
   
@@ -44,7 +35,6 @@ public:
   void readFile(const string &fil);
 
   const Item *findItem(const string &name) const;
-  void process(const Item &dst, const Source &in);
 
   void writeOut(const string &fil) const;
 

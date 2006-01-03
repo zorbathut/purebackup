@@ -31,13 +31,13 @@ void State::readFile(const string &fil) {
   while(getkvData(ifs, kvd)) {
     if(kvd.category == "file") {
       Item item;
-      item.name = kvd.consume("name");
       item.type = MTI_ORIGINAL;
       item.size = atoll(kvd.consume("size").c_str());
       item.timestamp = atoll(kvd.consume("timestamp").c_str());
       item.setTotalChecksum(atochecksum(kvd.consume("checksum_sha1").c_str()));
-      CHECK(!items.count(item.name));
-      items[item.name] = item;
+      string itemname = kvd.consume("name");
+      CHECK(!items.count(itemname));
+      items[itemname] = item;
     } else {
       CHECK(0);
     }
@@ -50,21 +50,27 @@ const Item *State::findItem(const string &name) const {
   return NULL;
 }
 
-void State::process(const Item &dst, const Source &in) {
-  if(in.type == SRC_PRESERVE) {
-    CHECK(items.count(dst.name));
-    const Item &onto = items[dst.name];
-    CHECK(onto.name == dst.name);
-    CHECK(onto.size == dst.size);
-    CHECK(onto.timestamp == dst.timestamp);
-  } else if(in.type == SRC_APPEND) {
-    CHECK(items.count(dst.name));
-    Item &onto = items[dst.name];
-    CHECK(onto.name == dst.name);
-    CHECK(onto.size < dst.size);
-    CHECK(dst.checksumPart(onto.size) == onto.checksum());
-    onto = dst;
+/*
+void State::process(const Instruction &in, const Item *srcdata) {
+  if(in.type == SRC_APPEND) {
+    CHECK(srcdata);
+    CHECK(srcdata->name == in.dst);
+    CHECK(items.count(in.dst));
+    Item &onto = items[in.dst];
+    CHECK(onto.name == in.dst);
+    CHECK(onto.size < srcdata->size);
+    CHECK(srcdata->checksumPart(onto.size) == onto.checksum());
+    onto = *srcdata;
   } else if(in.type == SRC_COPYFROM) {
+    CHECK(srcdata);
+    CHECK(srcdata->name == in.copyfrom_src);
+    CHECK(!items.count(in.dst));
+    Item &onto = items[in.dst];
+    CHECK(onto.name == in.dst);
+    CHECK(onto.size < srcdata->size);
+    CHECK(srcdata->checksumPart(onto.size) == onto.checksum());
+    onto = *srcdata;
+    
     CHECK(!items.count(dst.name));
     CHECK(in.link->checksum() == dst.checksum());
     CHECK(in.link->size == dst.size);
@@ -72,16 +78,20 @@ void State::process(const Item &dst, const Source &in) {
   } else if(in.type == SRC_NEW) {
     CHECK(!items.count(dst.name));
     items[dst.name] = dst;
+  } else if(in.type == SRC_DELETE) {
+    CHECK(!items.count(dst.name));
+    items[dst.name] = dst;
   } else {
     CHECK(0);
   }
 }
+*/
 
 void State::writeOut(const string &fn) const {
   FILE *fil = fopen(fn.c_str(), "w");
   for(map<string, Item>::const_iterator itr = items.begin(); itr != items.end(); itr++) {
     fprintf(fil, "file {\n");
-    fprintf(fil, "  name=%s\n", itr->second.name.c_str());
+    fprintf(fil, "  name=%s\n", itr->first.c_str());
     fprintf(fil, "  size=%lld\n", itr->second.size);
     fprintf(fil, "  timestamp=%lld\n", itr->second.timestamp);
     fprintf(fil, "  checksum_sha1=%s\n", itr->second.checksum().toString().c_str());

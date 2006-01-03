@@ -65,13 +65,7 @@ Checksum Item::checksumPart(int len) const {
       Checksum tcs;
       SHA1_Final(tcs.bytes, &c);
       css.push_back(make_pair(len, tcs));
-      if(gottotal) {
-        fclose(phil);
-        return tcs;
-      }
-      SHA1_Update(&c, buf + (len - bytu), rv - (len - bytu));
-      len = size;
-      gottotal = true;
+      return tcs;
     } else {
       SHA1_Update(&c, buf, rv);
     }

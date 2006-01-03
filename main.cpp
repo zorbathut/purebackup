@@ -101,15 +101,16 @@ int main() {
   readConfig("purebackup.conf");
   scanPaths();
   
-  vector<Item> realitems;
+  map<string, Item> realitems;
   getRoot()->dumpItems(&realitems, "");
   dprintf("%d items found\n", realitems.size());
   
-  for(int i = 0; i < realitems.size(); i++) {
-    CHECK(realitems[i].size >= 0);
-    CHECK(realitems[i].timestamp >= 0);
+  for(map<string, Item>::iterator itr = realitems.begin(); itr != realitems.end(); itr++) {
+    CHECK(itr->second.size >= 0);
+    CHECK(itr->second.timestamp >= 0);
   }
   
+  /*
   State origstate;
   origstate.readFile("state0");
   
@@ -121,7 +122,7 @@ int main() {
   //for(int i = 0; i < origitems.size(); i++)
     //orignamelinks[origitems[i].name] = &origitems[i];
   
-  vector<Source> sources; // This parallels realitems
+  vector<Instruction> sources;
 
   for(int i = 0; i < realitems.size(); i++) {
     bool got = false;
@@ -139,6 +140,13 @@ int main() {
     
     // Then, we check to see if it's the same file only appended to
     if(!got) {
+      const Item *it = origstate.findItem(realitems[i].name);
+      if(it && it->size < realitems[i].size && realitems[i].checksumPart(it->size) == it->checksum()) {
+        Source src;
+        src.type = SRC_APPEND;
+        sources.push_back(src);
+        got = true;
+      }
     }
     
     // Next we see if we can copy it from any existing place
@@ -195,6 +203,8 @@ int main() {
   }
   
   State newstate = origstate;
+  for(int i = 0; i < sources.size(); i++)
+    newstate.process(realitems[i], sources[i]);
   
   /*State stt;
   for(int i = 0; i < sources.size(); i++)

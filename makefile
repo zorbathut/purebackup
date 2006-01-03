@@ -12,6 +12,9 @@ include $(SOURCES:=.d)
 purebackup.exe: $(SOURCES:=.o)
 	$(CPP) -o $@ $(SOURCES:=.o) $(LINKFLAGS) 
 
+run: purebackup.exe
+	purebackup.exe
+
 asm: $(SOURCES:=.S)
 
 clean:

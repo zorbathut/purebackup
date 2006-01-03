@@ -154,7 +154,7 @@ void MountTree::scan() {
   }
 }
 
-void MountTree::dumpItems(vector<Item> *items, string cpath) const {
+void MountTree::dumpItems(map<string, Item> *items, string cpath) const {
   if(type == MTT_VIRTUAL) {
     for(map<string, MountTree>::const_iterator itr = virtual_links.begin(); itr != virtual_links.end(); itr++) {
       itr->second.dumpItems(items, cpath + "/" + itr->first);
@@ -168,11 +168,11 @@ void MountTree::dumpItems(vector<Item> *items, string cpath) const {
   } else if(type == MTT_ITEM) {
     Item nit;
     nit.type = MTI_LOCAL;
-    nit.name = cpath;
     nit.size = item_size;
     nit.timestamp = item_timestamp;
     nit.local_path = item_fullpath;
-    items->push_back(nit);
+    CHECK(!items->count(cpath));
+    (*items)[cpath] = nit;
   } else {
     CHECK(0);
   }

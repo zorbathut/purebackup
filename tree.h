@@ -49,7 +49,7 @@ public:
   
   void scan();
 
-  void dumpItems(vector<Item> *items, string cpath) const;
+  void dumpItems(map<string, Item> *items, string cpath) const;
 
   MountTree() {
     type = MTT_UNINITTED;
