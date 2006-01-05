@@ -35,9 +35,10 @@ Checksum atochecksum(const char *in) {
   Checksum cs;
   for(int i = 0; i < 20; i++) {
     int k;
-    sscanf(string(in + i * 2, in + i * 2 + i).c_str(), "%x", &k);
+    sscanf(string(in + i * 2, in + i * 2 + 2).c_str(), "%x", &k);
     cs.bytes[i] = k;
   }
+  CHECK(strcmp(in, cs.toString().c_str()) == 0);
   return cs;
 }
 

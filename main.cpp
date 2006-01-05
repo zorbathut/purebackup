@@ -256,8 +256,11 @@ int main() {
       // Okay, now we see if it's been copied from somewhere
       if(!got) {
         const vector<pair<bool, string> > &sli = citemsizemap[ite.size];
+        printf("Trying %d originals\n", sli.size());
         for(int k = 0; k < sli.size(); k++) {
           CHECK(ite.size == citem[sli[k]].size);
+          printf("Comparing with %d:%s\n", sli[k].first, sli[k].second.c_str());
+          printf("%s vs %s\n", ite.checksum().toString().c_str(), citem[sli[k]].checksum().toString().c_str());
           if(ite.checksum() == citem[sli[k]].checksum()) {
             printf("Holy crapcock! Copying %s from %s:%d! MADNESS\n", itr->c_str(), sli[k].second.c_str(), sli[k].first);
             Instruction ti;
@@ -303,5 +306,8 @@ int main() {
   inst.push_back(fi);
   
   inst = sortInst(inst);
+  
+  for(int i = 0; i < inst.size(); i++)
+    printf("%s\n", inst[i].textout().c_str());
 
 }
