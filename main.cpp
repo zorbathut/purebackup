@@ -98,8 +98,8 @@ void scanPaths() {
   //printAll();
 }
 
-enum { TYPE_CREATE, TYPE_DELETE, TYPE_COPY, TYPE_APPEND, TYPE_STORE, TYPE_END };
-string type_strs[] = { "CREATE", "DELETE", "COPY", "APPEND", "STORE" };
+enum { TYPE_CREATE, TYPE_ROTATE, TYPE_DELETE, TYPE_COPY, TYPE_APPEND, TYPE_STORE, TYPE_END };
+string type_strs[] = { "CREATE", "ROTATE", "DELETE", "COPY", "APPEND", "STORE" };
 
 class Instruction {
 public:
@@ -128,7 +128,116 @@ string Instruction::textout() const {
   return rvx;
 }
 
-vector<Instruction> sortInst(const vector<Instruction> &oinst) {
+void loopprocess(int pos, vector<int> *loop, const vector<Instruction> &inst,
+    const map<pair<bool, string>, vector<int> > &depon, 
+    const map<pair<bool, string>, int> &creates,
+    const set<pair<bool, string> > &removed,
+    vector<bool> *noprob) {
+      
+  //printf("Entering loopprocess %d\n", pos);
+  //printf("%s\n", inst[pos].textout().c_str());
+      
+  if((*noprob)[pos])
+    return;
+  
+  if(loop->size() && loop->back() == pos)
+    return;
+  
+  //printf("Pushback %d\n", pos);
+  
+  loop->push_back(pos);
+  
+  if(set<int>(loop->begin(), loop->end()).size() != loop->size()) {
+    //printf("LOOP!\n");
+    //for(int i = 0; i < loop->size(); i++)
+      //printf("%d\n", (*loop)[i]);
+    return;
+  }
+  
+  //printf("Starting depends %d\n", pos);
+  vector<int> bku = *loop;
+  // Anything this depends on must exist
+  for(int i = 0; i < inst[pos].depends.size(); i++) {
+    CHECK(creates.count(inst[pos].depends[i]));
+    loopprocess(creates.find(inst[pos].depends[i])->second, loop, inst, depon, creates, removed, noprob);
+    if(*loop != bku)
+      return;
+  }
+  
+  //printf("Starting removes %d\n", pos);
+  // Anything this removes must have its dependencies complete
+  for(int i = 0; i < inst[pos].removes.size(); i++) {
+    if(!depon.count(inst[pos].removes[i]))
+      continue;
+    const vector<int> &dpa = depon.find(inst[pos].removes[i])->second;
+    for(int j = 0; j < dpa.size(); j++) {
+      loopprocess(dpa[j], loop, inst, depon, creates, removed, noprob);
+      if(*loop != bku)
+        return;
+    }
+  }
+  //printf("Done %d\n", pos);
+  
+  loop->pop_back();
+
+  (*noprob)[pos] = true;
+}
+
+vector<Instruction> deloop(const vector<Instruction> &inst) {
+  map<pair<bool, string>, vector<int> > depon;
+  map<pair<bool, string>, int> creates;
+  set<pair<bool, string> > removed;
+  vector<bool> noprob(inst.size());
+  for(int i = 0; i < inst.size(); i++) {
+    for(int j = 0; j < inst[i].depends.size(); j++)
+      depon[inst[i].depends[j]].push_back(i);
+    for(int j = 0; j < inst[i].creates.size(); j++) {
+      CHECK(!creates.count(inst[i].creates[j]));
+      creates[inst[i].creates[j]] = i;
+    }
+    for(int j = 0; j < inst[i].removes.size(); j++) {
+      CHECK(!removed.count(inst[i].removes[j]));
+      removed.insert(inst[i].removes[j]);
+    }
+  }
+  for(int i = 0; i < inst.size(); i++) {
+    vector<int> loop;
+    loopprocess(i, &loop, inst, depon, creates, removed, &noprob);
+    if(loop.size()) {
+      printf("Loop! %d\n", loop.size());
+      CHECK(loop.size() >= 3);
+      CHECK(loop.front() == loop.back());
+      set<int> lps(loop.begin(), loop.end());
+      CHECK(lps.size() == loop.size() - 1);
+      
+      // TODO: preserve the actual rotation order
+      Instruction rotinstr;
+      rotinstr.type = TYPE_ROTATE;
+      for(set<int>::iterator it = lps.begin(); it != lps.end(); it++) {
+        CHECK(inst[*it].type == TYPE_COPY);
+        rotinstr.depends.insert(rotinstr.depends.end(), inst[*it].depends.begin(), inst[*it].depends.end());
+        rotinstr.removes.insert(rotinstr.removes.end(), inst[*it].removes.begin(), inst[*it].removes.end());
+        rotinstr.creates.insert(rotinstr.creates.end(), inst[*it].creates.begin(), inst[*it].creates.end());
+      }
+      CHECK((set<pair<bool, string> >(rotinstr.depends.begin(), rotinstr.depends.end()).size() == rotinstr.depends.size()));
+      CHECK((set<pair<bool, string> >(rotinstr.removes.begin(), rotinstr.removes.end()).size() == rotinstr.removes.size()));
+      CHECK((set<pair<bool, string> >(rotinstr.creates.begin(), rotinstr.creates.end()).size() == rotinstr.creates.size()));
+      
+      vector<Instruction> nistr;
+      for(int i = 0; i < inst.size(); i++)
+        if(!lps.count(i))
+          nistr.push_back(inst[i]);
+      nistr.push_back(rotinstr);
+      return deloop(nistr);
+      
+    }
+  }
+  return inst;
+}
+
+vector<Instruction> sortInst(vector<Instruction> oinst) {
+  oinst = deloop(oinst);
+  
   vector<Instruction> buckets[TYPE_END];
   map<pair<bool, string>, int> leftToUse;
   for(int i = 0; i < oinst.size(); i++) {
@@ -178,6 +287,9 @@ vector<Instruction> sortInst(const vector<Instruction> &oinst) {
         j--;
       }
     }
+    for(int i = 0; i < TYPE_END; i++)
+      tcl -= buckets[i].size();
+    CHECK(tcl != 0);
   }
 
   return kinstr;
