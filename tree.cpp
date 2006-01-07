@@ -169,7 +169,7 @@ void MountTree::dumpItems(map<string, Item> *items, string cpath) const {
     Item nit;
     nit.type = MTI_LOCAL;
     nit.size = item_size;
-    nit.timestamp = item_timestamp;
+    nit.metadata.timestamp = item_timestamp;
     nit.local_path = item_fullpath;
     CHECK(!items->count(cpath));
     (*items)[cpath] = nit;

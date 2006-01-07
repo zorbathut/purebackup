@@ -98,20 +98,6 @@ void scanPaths() {
   //printAll();
 }
 
-enum { TYPE_CREATE, TYPE_ROTATE, TYPE_DELETE, TYPE_COPY, TYPE_APPEND, TYPE_STORE, TYPE_END };
-string type_strs[] = { "CREATE", "ROTATE", "DELETE", "COPY", "APPEND", "STORE" };
-
-class Instruction {
-public:
-  vector<pair<bool, string> > depends;
-  vector<pair<bool, string> > removes;
-  vector<pair<bool, string> > creates;
-
-  int type;
-
-  string textout() const;
-};
-
 void dumpa(string *str, const string &txt, const vector<pair<bool, string> > &vek) {
   *str += "  " + txt + "\n";
   for(int i = 0; i < vek.size(); i++)
@@ -317,13 +303,13 @@ int main() {
   
   for(map<string, Item>::iterator itr = realitems.begin(); itr != realitems.end(); itr++) {
     CHECK(itr->second.size >= 0);
-    CHECK(itr->second.timestamp >= 0);
+    CHECK(itr->second.metadata.timestamp >= 0);
     ftc.insert(itr->first);
   }
   
   for(map<string, Item>::const_iterator itr = origstate.getItemDb().begin(); itr != origstate.getItemDb().end(); itr++) {
     CHECK(itr->second.size >= 0);
-    CHECK(itr->second.timestamp >= 0);
+    CHECK(itr->second.metadata.timestamp >= 0);
     CHECK(citem.count(make_pair(false, itr->first)) == 0);
     citem[make_pair(false, itr->first)] = itr->second;
     citemsizemap[itr->second.size].push_back(make_pair(false, itr->first));
@@ -342,13 +328,13 @@ int main() {
       // First, we check to see if it's the same file as existed before
       if(!got && citem.count(make_pair(false, *itr))) {
         const Item &pite = citem.find(make_pair(false, *itr))->second;
-        if(ite.size == pite.size && ite.timestamp == pite.timestamp) {
+        if(ite.size == pite.size && ite.metadata == pite.metadata) {
           // It's identical!
           printf("Preserve file %s\n", itr->c_str());
           fi.creates.push_back(make_pair(true, *itr));
           got = true;
         } else if(ite.size == pite.size && ite.checksum() == pite.checksum()) {
-          // It's touched! But we currently don't care!
+          // It's touched! But we currently don't care! But we really should! We will soon!
           printf("Preserve file %s\n", itr->c_str());
           fi.creates.push_back(make_pair(true, *itr));
           got = true;
@@ -421,5 +407,13 @@ int main() {
   
   for(int i = 0; i < inst.size(); i++)
     printf("%s\n", inst[i].textout().c_str());
+  
+  /*
+  // TODO: Create new state by traversing instructions
+  State newstate = origstate;
+  for(int i = 0; i < inst.size(); i++)
+    newstate.process(inst[i]);
+  
+  CHECK(newstate.getItemDb() == realitems);*/
 
 }

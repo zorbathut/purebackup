@@ -28,11 +28,21 @@ using namespace std;
 
 enum { MTI_ORIGINAL, MTI_LOCAL, MTI_NONEXISTENT, MTI_END };
 
+class Metadata {
+public:
+  long long timestamp;
+  /* permissions and stuff */
+};
+
+inline bool operator==(const Metadata &lhs, const Metadata &rhs) {
+  return lhs.timestamp == rhs.timestamp;
+}
+
 class Item {
 public:
   int type;
   long long size;
-  long long timestamp;
+  Metadata metadata;
 
   string local_path;
 

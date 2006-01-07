@@ -33,7 +33,7 @@ void State::readFile(const string &fil) {
       Item item;
       item.type = MTI_ORIGINAL;
       item.size = atoll(kvd.consume("size").c_str());
-      item.timestamp = atoll(kvd.consume("timestamp").c_str());
+      item.metadata.timestamp = atoll(kvd.consume("timestamp").c_str());
       item.setTotalChecksum(atochecksum(kvd.consume("checksum_sha1").c_str()));
       string itemname = kvd.consume("name");
       CHECK(!items.count(itemname));
@@ -55,36 +55,14 @@ const Item *State::findItem(const string &name) const {
 }
 
 /*
-void State::process(const Instruction &in, const Item *srcdata) {
-  if(in.type == SRC_APPEND) {
-    CHECK(srcdata);
-    CHECK(srcdata->name == in.dst);
-    CHECK(items.count(in.dst));
-    Item &onto = items[in.dst];
-    CHECK(onto.name == in.dst);
-    CHECK(onto.size < srcdata->size);
-    CHECK(srcdata->checksumPart(onto.size) == onto.checksum());
-    onto = *srcdata;
-  } else if(in.type == SRC_COPYFROM) {
-    CHECK(srcdata);
-    CHECK(srcdata->name == in.copyfrom_src);
-    CHECK(!items.count(in.dst));
-    Item &onto = items[in.dst];
-    CHECK(onto.name == in.dst);
-    CHECK(onto.size < srcdata->size);
-    CHECK(srcdata->checksumPart(onto.size) == onto.checksum());
-    onto = *srcdata;
-    
-    CHECK(!items.count(dst.name));
-    CHECK(in.link->checksum() == dst.checksum());
-    CHECK(in.link->size == dst.size);
-    items[dst.name] = dst;
-  } else if(in.type == SRC_NEW) {
-    CHECK(!items.count(dst.name));
-    items[dst.name] = dst;
-  } else if(in.type == SRC_DELETE) {
-    CHECK(!items.count(dst.name));
-    items[dst.name] = dst;
+void State::process(const Instruction &in) {
+  if(in.type == TYPE_CREATE) {
+    // Completely ignore!
+  } else if(in.type == TYPE_ROTATE) {
+  } else if(in.type == TYPE_DELETE) {
+  } else if(in.type == TYPE_COPY) {
+  } else if(in.type == TYPE_APPEND) {
+  } else if(in.type == TYPE_STORE) {
   } else {
     CHECK(0);
   }
@@ -97,7 +75,7 @@ void State::writeOut(const string &fn) const {
     fprintf(fil, "file {\n");
     fprintf(fil, "  name=%s\n", itr->first.c_str());
     fprintf(fil, "  size=%lld\n", itr->second.size);
-    fprintf(fil, "  timestamp=%lld\n", itr->second.timestamp);
+    fprintf(fil, "  timestamp=%lld\n", itr->second.metadata.timestamp);
     fprintf(fil, "  checksum_sha1=%s\n", itr->second.checksum().toString().c_str());
     fprintf(fil, "}\n");
     fprintf(fil, "\n");

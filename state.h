@@ -25,6 +25,40 @@
 
 using namespace std;
 
+enum { TYPE_CREATE, TYPE_ROTATE, TYPE_DELETE, TYPE_COPY, TYPE_APPEND, TYPE_STORE, TYPE_END };
+const string type_strs[] = { "CREATE", "ROTATE", "DELETE", "COPY", "APPEND", "STORE" };
+
+class Instruction {
+public:
+  vector<pair<bool, string> > depends;
+  vector<pair<bool, string> > removes;
+  vector<pair<bool, string> > creates;
+
+  int type;
+
+  string create_path;
+  Metadata create_meta;
+
+  vector<string> rotate_paths; // [1] becomes [0], [2] becomes [1], [0] becomes [n-1]
+  vector<Metadata> rotate_meta; // the various new metadatas
+
+  string delete_path;
+
+  string copy_source;
+  string copy_dest;
+  string copy_dest_meta;
+
+  string append_path;
+  long long append_size;
+  Metadata append_meta;
+
+  string store_path;
+  long long store_size;
+  Metadata store_meta;
+
+  string textout() const;
+};
+
 class State {
 private:
   
@@ -33,6 +67,8 @@ private:
 public:
   
   void readFile(const string &fil);
+
+  void process(const Instruction &inst);
 
   const map<string, Item> &getItemDb() const;
   const Item *findItem(const string &name) const;
