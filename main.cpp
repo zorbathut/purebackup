@@ -342,9 +342,16 @@ int main() {
           fi.creates.push_back(make_pair(true, *itr));
           got = true;
         } else if(ite.size == pite.size && ite.checksum() == pite.checksum()) {
-          // It's touched! But we currently don't care! But we really should! We will soon!
-          printf("Preserve file %s\n", itr->c_str());
-          fi.creates.push_back(make_pair(true, *itr));
+          // It's touched!
+          CHECK(ite.metadata != pite.metadata);
+          printf("Touching file %s\n", itr->c_str());
+          Instruction ti;
+          ti.type = TYPE_TOUCH;
+          ti.creates.push_back(make_pair(true, *itr));
+          ti.depends.push_back(make_pair(false, *itr)); // if this matters, something is hideously wrong
+          ti.touch_path = *itr;
+          ti.touch_meta = ite.metadata;
+          inst.push_back(ti);
           got = true;
         } else if(ite.size > pite.size && ite.checksumPart(pite.size) == pite.checksum()) {
           // It's appended!

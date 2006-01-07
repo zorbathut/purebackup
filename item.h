@@ -38,6 +38,10 @@ inline bool operator==(const Metadata &lhs, const Metadata &rhs) {
   return lhs.timestamp == rhs.timestamp;
 }
 
+inline bool operator!=(const Metadata &lhs, const Metadata &rhs) {
+  return !(lhs.timestamp == rhs.timestamp);
+}
+
 class Item {
 public:
   int type;

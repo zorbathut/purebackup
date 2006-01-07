@@ -25,8 +25,8 @@
 
 using namespace std;
 
-enum { TYPE_CREATE, TYPE_ROTATE, TYPE_DELETE, TYPE_COPY, TYPE_APPEND, TYPE_STORE, TYPE_END };
-const string type_strs[] = { "CREATE", "ROTATE", "DELETE", "COPY", "APPEND", "STORE" };
+enum { TYPE_CREATE, TYPE_ROTATE, TYPE_DELETE, TYPE_COPY, TYPE_APPEND, TYPE_STORE, TYPE_TOUCH, TYPE_END };
+const string type_strs[] = { "CREATE", "ROTATE", "DELETE", "COPY", "APPEND", "STORE", "TOUCH" };
 
 class Instruction {
 public:
@@ -56,6 +56,9 @@ public:
   long long store_size;
   Metadata store_meta;
   Checksum store_checksum;
+  
+  string touch_path;
+  Metadata touch_meta;
 
   string textout() const;
 };
