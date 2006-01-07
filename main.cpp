@@ -193,17 +193,26 @@ vector<Instruction> deloop(const vector<Instruction> &inst) {
       printf("Loop! %d\n", loop.size());
       CHECK(loop.size() >= 3);
       CHECK(loop.front() == loop.back());
-      set<int> lps(loop.begin(), loop.end());
-      CHECK(lps.size() == loop.size() - 1);
+      CHECK(set<int>(loop.begin(), loop.end()).size() == loop.size() - 1);
       
-      // TODO: preserve the actual rotation order
+      loop.pop_back();
+      
       Instruction rotinstr;
       rotinstr.type = TYPE_ROTATE;
-      for(set<int>::iterator it = lps.begin(); it != lps.end(); it++) {
-        CHECK(inst[*it].type == TYPE_COPY);
-        rotinstr.depends.insert(rotinstr.depends.end(), inst[*it].depends.begin(), inst[*it].depends.end());
-        rotinstr.removes.insert(rotinstr.removes.end(), inst[*it].removes.begin(), inst[*it].removes.end());
-        rotinstr.creates.insert(rotinstr.creates.end(), inst[*it].creates.begin(), inst[*it].creates.end());
+      for(int i = 0; i < loop.size(); i++) {
+        const Instruction &insta = inst[loop[i]];
+        const Instruction &instb = inst[loop[(i+1) % loop.size()]];
+        
+        CHECK(insta.type == TYPE_COPY);
+        CHECK(instb.type == TYPE_COPY);
+        
+        CHECK(instb.copy_source == insta.copy_dest);
+        
+        rotinstr.depends.insert(rotinstr.depends.end(), insta.depends.begin(), insta.depends.end());
+        rotinstr.removes.insert(rotinstr.removes.end(), insta.removes.begin(), insta.removes.end());
+        rotinstr.creates.insert(rotinstr.creates.end(), insta.creates.begin(), insta.creates.end());
+        
+        rotinstr.rotate_paths.push_back(make_pair(insta.copy_dest, insta.copy_dest_meta));
       }
       CHECK((set<pair<bool, string> >(rotinstr.depends.begin(), rotinstr.depends.end()).size() == rotinstr.depends.size()));
       CHECK((set<pair<bool, string> >(rotinstr.removes.begin(), rotinstr.removes.end()).size() == rotinstr.removes.size()));
@@ -211,11 +220,10 @@ vector<Instruction> deloop(const vector<Instruction> &inst) {
       
       vector<Instruction> nistr;
       for(int i = 0; i < inst.size(); i++)
-        if(!lps.count(i))
+        if(!count(loop.begin(), loop.end(), i))
           nistr.push_back(inst[i]);
       nistr.push_back(rotinstr);
       return deloop(nistr);
-      
     }
   }
   return inst;
@@ -346,6 +354,10 @@ int main() {
           ti.creates.push_back(make_pair(true, *itr));
           ti.depends.push_back(make_pair(false, *itr));
           ti.removes.push_back(make_pair(false, *itr));
+          ti.append_path = *itr;
+          ti.append_size = ite.size;
+          ti.append_meta = ite.metadata;
+          ti.append_checksum = ite.checksum();
           inst.push_back(ti);
           got = true;
         }
@@ -367,6 +379,9 @@ int main() {
             ti.depends.push_back(sli[k]);
             if(citem.count(make_pair(false, *itr)))
               ti.removes.push_back(make_pair(false, *itr));
+            ti.copy_source = sli[k].second;
+            ti.copy_dest = *itr;
+            ti.copy_dest_meta = ite.metadata;
             inst.push_back(ti);
             got = true;
             break;
@@ -374,14 +389,18 @@ int main() {
         }
       }
       
-      // And now we give up and just create it
+      // And now we give up and just store it
       if(!got) {
-        printf("Creating %s from GALACTIC ETHER\n", itr->c_str());
+        printf("Storing %s from GALACTIC ETHER\n", itr->c_str());
         Instruction ti;
         ti.type = TYPE_STORE;
         ti.creates.push_back(make_pair(true, *itr));
         if(citem.count(make_pair(false, *itr)))
           ti.removes.push_back(make_pair(false, *itr));
+        ti.store_path = *itr;
+        ti.store_size = ite.size;
+        ti.store_meta = ite.metadata;
+        ti.store_checksum = ite.checksum();
         inst.push_back(ti);
         got = true;
       }

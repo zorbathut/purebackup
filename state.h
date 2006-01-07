@@ -39,22 +39,23 @@ public:
   string create_path;
   Metadata create_meta;
 
-  vector<string> rotate_paths; // [1] becomes [0], [2] becomes [1], [0] becomes [n-1]
-  vector<Metadata> rotate_meta; // the various new metadatas
+  vector<pair<string, Metadata> > rotate_paths; // [0].first becomes [n-1], [1].first becomes [0], [2].first becomes [1]
 
   string delete_path;
 
   string copy_source;
   string copy_dest;
-  string copy_dest_meta;
+  Metadata copy_dest_meta;
 
   string append_path;
   long long append_size;
   Metadata append_meta;
+  Checksum append_checksum;
 
   string store_path;
   long long store_size;
   Metadata store_meta;
+  Checksum store_checksum;
 
   string textout() const;
 };
