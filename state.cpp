@@ -54,20 +54,45 @@ const Item *State::findItem(const string &name) const {
   return NULL;
 }
 
-/*
+
 void State::process(const Instruction &in) {
   if(in.type == TYPE_CREATE) {
     // Completely ignore!
   } else if(in.type == TYPE_ROTATE) {
+    vector<Item> srcs;
+    for(int i = 0; i < in.rotate_paths.size(); i++) {
+      CHECK(items.count(in.rotate_paths[i].first));
+      srcs.push_back(items[in.rotate_paths[i].first]);
+      srcs.back().metadata = in.rotate_paths[i].second;
+      printf("%lld %s\n", srcs.back().metadata.timestamp, srcs.back().checksum().toString().c_str());
+    }
+    for(int i = 0; i < in.rotate_paths.size(); i++)
+      items[in.rotate_paths[(i + 1) % in.rotate_paths.size()].first] = srcs[i];
   } else if(in.type == TYPE_DELETE) {
+    CHECK(items.count(in.delete_path));
+    items.erase(items.find(in.delete_path));
   } else if(in.type == TYPE_COPY) {
+    CHECK(items.count(in.copy_source));
+    items[in.copy_dest] = items[in.copy_source];
+    items[in.copy_dest].metadata = in.copy_dest_meta;
   } else if(in.type == TYPE_APPEND) {
+    CHECK(items.count(in.append_path));
+    items[in.append_path].size = in.append_size;
+    items[in.append_path].metadata = in.append_meta;
+    items[in.append_path].setTotalChecksum(in.append_checksum);
   } else if(in.type == TYPE_STORE) {
+    if(items.count(in.store_path))
+      items.erase(items.find(in.store_path));
+    items[in.store_path].size = in.store_size;
+    items[in.store_path].metadata = in.store_meta;
+    items[in.store_path].setTotalChecksum(in.store_checksum);
+  } else if(in.type == TYPE_TOUCH) {
+    CHECK(items.count(in.touch_path));
+    items[in.touch_path].metadata = in.touch_meta;
   } else {
     CHECK(0);
   }
 }
-*/
 
 void State::writeOut(const string &fn) const {
   FILE *fil = fopen(fn.c_str(), "w");

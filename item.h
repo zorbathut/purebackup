@@ -55,8 +55,14 @@ public:
 
   void setTotalChecksum(const Checksum &chs);
 
+  string toString() const;
+
 private:
   mutable vector<pair<int, Checksum> > css;
 };
+
+inline bool operator==(const Item &lhs, const Item &rhs) {
+  return lhs.size == rhs.size && lhs.metadata == rhs.metadata && lhs.checksum() == rhs.checksum();
+}
 
 #endif

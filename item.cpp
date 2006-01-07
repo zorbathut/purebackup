@@ -40,22 +40,19 @@ Checksum Item::checksum() const {
 }
 
 Checksum Item::checksumPart(int len) const {
-  bool gottotal = false;
   for(int i = 0; i < css.size(); i++) {
     if(css[i].first == len)
       return css[i].second;
-    if(css[i].first == size)
-      gottotal = true;
   }
   
-  if(len == size)
-    gottotal = true;
+  CHECK(type == MTI_LOCAL);
   
   int bytu = 0;
   
   SHA_CTX c;
   SHA1_Init(&c);
   FILE *phil = fopen(local_path.c_str(), "rb");
+  CHECK(phil);
   while(1) {
     char buf[1024*128];
     int rv = fread(buf, 1, sizeof(buf), phil);
@@ -65,6 +62,7 @@ Checksum Item::checksumPart(int len) const {
       Checksum tcs;
       SHA1_Final(tcs.bytes, &c);
       css.push_back(make_pair(len, tcs));
+      fclose(phil);
       return tcs;
     } else {
       SHA1_Update(&c, buf, rv);
@@ -79,7 +77,14 @@ Checksum Item::checksumPart(int len) const {
 }
 
 void Item::setTotalChecksum(const Checksum &chs) {
-  CHECK(type == MTI_ORIGINAL);
+  if(type != MTI_ORIGINAL) {
+    type = MTI_ORIGINAL;
+    css.clear();
+  }
   CHECK(css.size() == 0);
   css.push_back(make_pair(size, chs));
+}
+
+string Item::toString() const {
+  return StringPrintf("%lld %lld %s", size, metadata.timestamp, checksum().toString().c_str());
 }

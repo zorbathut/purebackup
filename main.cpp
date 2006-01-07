@@ -212,7 +212,7 @@ vector<Instruction> deloop(const vector<Instruction> &inst) {
         rotinstr.removes.insert(rotinstr.removes.end(), insta.removes.begin(), insta.removes.end());
         rotinstr.creates.insert(rotinstr.creates.end(), insta.creates.begin(), insta.creates.end());
         
-        rotinstr.rotate_paths.push_back(make_pair(insta.copy_dest, insta.copy_dest_meta));
+        rotinstr.rotate_paths.push_back(make_pair(insta.copy_source, insta.copy_dest_meta));
       }
       CHECK((set<pair<bool, string> >(rotinstr.depends.begin(), rotinstr.depends.end()).size() == rotinstr.depends.size()));
       CHECK((set<pair<bool, string> >(rotinstr.removes.begin(), rotinstr.removes.end()).size() == rotinstr.removes.size()));
@@ -434,12 +434,22 @@ int main() {
   for(int i = 0; i < inst.size(); i++)
     printf("%s\n", inst[i].textout().c_str());
   
-  /*
   // TODO: Create new state by traversing instructions
   State newstate = origstate;
   for(int i = 0; i < inst.size(); i++)
     newstate.process(inst[i]);
-  
-  CHECK(newstate.getItemDb() == realitems);*/
+
+  {
+    const map<string, Item> &lhs = newstate.getItemDb();
+    const map<string, Item> &rhs = realitems;
+    CHECK(lhs.size() == rhs.size());
+    for(map<string, Item>::const_iterator lhsi = lhs.begin(), rhsi = rhs.begin(); lhsi != lhs.end(); lhsi++, rhsi++) {
+      printf("Comparing %s and %s\n", lhsi->first.c_str(), rhsi->first.c_str());
+      printf("%s\n", lhsi->second.toString().c_str());
+      printf("%s\n", rhsi->second.toString().c_str());
+      CHECK(lhsi->first == rhsi->first);
+      CHECK(lhsi->second == rhsi->second);
+    }
+  }
 
 }
