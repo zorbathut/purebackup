@@ -28,7 +28,7 @@ using namespace std;
 void State::readFile(const string &fil) {
   ifstream ifs(fil.c_str());
   kvData kvd;
-  while(getkvData(ifs, kvd)) {
+  while(getkvDataInline(ifs, kvd)) {
     if(kvd.category == "file") {
       Item item;
       item.type = MTI_ORIGINAL;
@@ -95,16 +95,15 @@ void State::process(const Instruction &in) {
 }
 
 void State::writeOut(const string &fn) const {
-  FILE *fil = fopen(fn.c_str(), "w");
+  ofstream ofs(fn.c_str());
   for(map<string, Item>::const_iterator itr = items.begin(); itr != items.end(); itr++) {
-    fprintf(fil, "file {\n");
-    fprintf(fil, "  name=%s\n", itr->first.c_str());
-    fprintf(fil, "  size=%lld\n", itr->second.size);
-    fprintf(fil, "  timestamp=%lld\n", itr->second.metadata.timestamp);
-    fprintf(fil, "  checksum_sha1=%s\n", itr->second.checksum().toString().c_str());
-    fprintf(fil, "}\n");
-    fprintf(fil, "\n");
+    kvData kvd;
+    kvd.category = "file";
+    kvd.kv["name"] = itr->first;
+    kvd.kv["size"] = StringPrintf("%lld", itr->second.size);
+    kvd.kv["timestamp"] = StringPrintf("%lld", itr->second.metadata.timestamp);
+    kvd.kv["checksum_sha1"] = itr->second.checksum().toString();
+    putkvDataInline(ofs, kvd, "name");
   }
-  fclose(fil);
 }
 

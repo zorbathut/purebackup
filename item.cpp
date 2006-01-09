@@ -79,9 +79,8 @@ Checksum Item::checksumPart(int len) const {
 void Item::setTotalChecksum(const Checksum &chs) {
   if(type != MTI_ORIGINAL) {
     type = MTI_ORIGINAL;
-    css.clear();
   }
-  CHECK(css.size() == 0);
+  css.clear();
   css.push_back(make_pair(size, chs));
 }
 

@@ -422,6 +422,7 @@ int main() {
       printf("Delete file %s\n", itr->c_str());
       Instruction ti;
       ti.type = TYPE_DELETE;
+      ti.delete_path = *itr;
       ti.removes.push_back(make_pair(false, *itr));
       inst.push_back(ti);
     }
@@ -431,13 +432,12 @@ int main() {
   
   inst = sortInst(inst);
   
-  for(int i = 0; i < inst.size(); i++)
-    printf("%s\n", inst[i].textout().c_str());
-  
-  // TODO: Create new state by traversing instructions
   State newstate = origstate;
-  for(int i = 0; i < inst.size(); i++)
+  
+  for(int i = 0; i < inst.size(); i++) {
+    printf("%s\n", inst[i].textout().c_str());
     newstate.process(inst[i]);
+  }
 
   {
     const map<string, Item> &lhs = newstate.getItemDb();
@@ -451,5 +451,7 @@ int main() {
       CHECK(lhsi->second == rhsi->second);
     }
   }
+  
+  newstate.writeOut("state1");
 
 }

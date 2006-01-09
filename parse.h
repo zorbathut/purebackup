@@ -46,4 +46,7 @@ public:
 istream &getLineStripped(istream &ifs, string &out);
 istream &getkvData(istream &ifs, kvData &out);
 
+void putkvDataInline(ostream &ofs, const kvData &in, const string &mostimportant = "");
+istream &getkvDataInline(istream &ifs, kvData &out);
+
 #endif

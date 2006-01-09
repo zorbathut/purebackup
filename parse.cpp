@@ -119,3 +119,125 @@ istream &getkvData(istream &ifs, kvData &out) {
   CHECK(0);
   return ifs; // this will be failure
 }
+
+char toHexChar(int in) {
+  CHECK(in >= 0 && in < 16);
+  if(in < 10)
+    return in + '0';
+  else
+    return in - 10 + 'A';
+}
+
+void appendEscapedStr(string *stt, const string &esc) {
+  if(stt->size())
+    (*stt) += ' ';
+  for(int i = 0; i < esc.size(); i++) {
+    if(esc[i] == ' ') {
+      (*stt) += "\\ ";
+    } else if(esc[i] == '\n') {
+      (*stt) += "\\n";
+    } else if(esc[i] == '\\') {
+      (*stt) += "\\\\";
+    } else if(esc[i] > 32 && esc[i] < 127) {
+      (*stt) += esc[i];
+    } else {
+      (*stt) += "\\x" + toHexChar(esc[i] / 16) + toHexChar(esc[i] % 16);
+    }
+  }
+}
+
+void putkvDataInline(ostream &ofs, const kvData &in, const string &mostimportant) {
+  string stt;
+  appendEscapedStr(&stt, in.category);
+  if(mostimportant != "") {
+    CHECK(in.kv.count(mostimportant));
+    appendEscapedStr(&stt, mostimportant);
+    appendEscapedStr(&stt, in.kv.find(mostimportant)->second);
+  }
+  for(map<string, string>::const_iterator itr = in.kv.begin(); itr != in.kv.end(); itr++) {
+    CHECK(itr->first.size());
+    if(itr->first == mostimportant)
+      continue;
+    appendEscapedStr(&stt, itr->first);
+    appendEscapedStr(&stt, itr->second);
+  }
+  ofs << stt << '\n';
+}
+
+int hexDigit(char pt) {
+  if(isdigit(pt))
+    return pt - '0';
+  if(pt >= 'A' && pt <= 'F')
+    return pt - 'A' + 10;
+  if(pt >= 'a' && pt <= 'f')
+    return pt - 'a' + 10;
+  return -1;
+}
+
+bool isHex(char pt) {
+  return hexDigit(pt) != -1;
+}
+
+int parseHex(const char **pt) {
+  CHECK(isHex(**pt));
+  if(isHex(*(*pt + 1))) {
+    int rv = hexDigit(**pt) * 16 + isHex(*(*pt + 1));
+    (*pt) += 2;
+    return rv;
+  } else {
+    int rv = hexDigit(**pt);
+    (*pt) += 1;
+    return rv;
+  }
+}
+
+string parseWord(const char **pt) {
+  string oot;
+  while(**pt && **pt != ' ') {
+    if(**pt == '\\') {
+      // escape character
+      (*pt)++;
+      if(**pt == '\\') {
+        oot += '\\';
+      } else if(**pt == 'n') {
+        oot += '\n';
+      } else if(**pt == ' ') {
+        oot += ' ';
+      } else if(**pt == 'x') {
+        (*pt)++;
+        oot += parseHex(pt);
+      } else {
+        CHECK(0);
+      }
+    } else if(**pt > 32 && **pt < 127) {
+      // standard ascii
+      oot += **pt;
+    } else {
+      CHECK(0);
+    }
+    (*pt)++;
+  }
+  return oot;
+}
+
+istream &getkvDataInline(istream &ifs, kvData &out) {
+  out.kv.clear();
+  out.category.clear();
+  string line;
+  getLineStripped(ifs, line);
+  if(!ifs)
+    return ifs; // failure, end of universe, sanity halted!
+  const char *pt = line.c_str();
+  out.category = parseWord(&pt);
+  while(*pt) {
+    CHECK(*pt == ' ');
+    pt++;
+    string key = parseWord(&pt);
+    CHECK(*pt == ' ');
+    pt++;
+    string value = parseWord(&pt);
+    CHECK(!out.kv.count(key));
+    out.kv[key] = value;
+  }
+  return ifs; // this will be failure
+}
