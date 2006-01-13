@@ -21,6 +21,8 @@
 #include "tree.h"
 #include "state.h"
 
+#include "minizip/zip.h"
+
 #include <string>
 #include <fstream>
 #include <set>
@@ -290,6 +292,34 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
 }
 
 int main() {
+  {
+    zipFile zf = zipOpen("test.zip", APPEND_STATUS_CREATE);
+    CHECK(zf);
+    zip_fileinfo zfi;
+    zfi.tmz_date.tm_sec = 0;
+    zfi.tmz_date.tm_min = 0;
+    zfi.tmz_date.tm_hour = 0;
+    zfi.tmz_date.tm_mday = 1;
+    zfi.tmz_date.tm_mon = 0;
+    zfi.tmz_date.tm_year = 2006;
+    
+    zfi.dosDate = 0;
+    zfi.internal_fa = 0;
+    zfi.external_fa = 0;
+
+    CHECK(!zipOpenNewFileInZip(zf, "test.txt", &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, 9));
+    
+    for(int i = 0; i < 1000000; i++) {
+      char bf[100];
+      sprintf(bf, "%d\r\n", i);
+      CHECK(!zipWriteInFileInZip(zf, bf, strlen(bf)));
+    }
+    
+    CHECK(!zipCloseFileInZip(zf));
+    CHECK(!zipClose(zf, NULL));
+  }
+  return 0;
+  
   readConfig("purebackup.conf");
   scanPaths();
   
