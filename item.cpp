@@ -18,8 +18,16 @@
 
 #include "item.h"
 #include "debug.h"
+#include "parse.h"
 
 #include <openssl/sha.h>
+
+string Metadata::toKvd() const {
+  kvData kvd;
+  kvd.category = "metadata";
+  kvd.kv["timestamp"] = StringPrintf("%lld", timestamp);
+  return getkvDataInlineString(kvd);
+}
 
 string Checksum::toString() const {
   string ostr;

@@ -100,22 +100,6 @@ void scanPaths() {
   //printAll();
 }
 
-void dumpa(string *str, const string &txt, const vector<pair<bool, string> > &vek) {
-  *str += "  " + txt + "\n";
-  for(int i = 0; i < vek.size(); i++)
-    *str += StringPrintf("    %d:%s\n", vek[i].first, vek[i].second.c_str());
-}
-
-string Instruction::textout() const {
-  string rvx;
-  CHECK(type >= 0 && type < TYPE_END);
-  rvx = type_strs[type] + "\n";
-  dumpa(&rvx, "Depends:", depends);
-  dumpa(&rvx, "Removes:", removes);
-  dumpa(&rvx, "Creates:", creates);
-  return rvx;
-}
-
 void loopprocess(int pos, vector<int> *loop, const vector<Instruction> &inst,
     const map<pair<bool, string>, vector<int> > &depon, 
     const map<pair<bool, string>, int> &creates,
@@ -278,7 +262,8 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
           CHECK(!live.count(ite));
           live.insert(buckets[i][j].creates[k]);
         }
-        kinstr.push_back(buckets[i][j]);
+        if(i != TYPE_CREATE)  // these don't get output
+          kinstr.push_back(buckets[i][j]);
         buckets[i].erase(buckets[i].begin() + j);
         j--;
       }
@@ -291,34 +276,23 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
   return kinstr;
 }
 
-int main() {
-  {
-    zipFile zf = zipOpen("test.zip", APPEND_STATUS_CREATE);
-    CHECK(zf);
-    zip_fileinfo zfi;
-    zfi.tmz_date.tm_sec = 0;
-    zfi.tmz_date.tm_min = 0;
-    zfi.tmz_date.tm_hour = 0;
-    zfi.tmz_date.tm_mday = 1;
-    zfi.tmz_date.tm_mon = 0;
-    zfi.tmz_date.tm_year = 2006;
-    
-    zfi.dosDate = 0;
-    zfi.internal_fa = 0;
-    zfi.external_fa = 0;
-
-    CHECK(!zipOpenNewFileInZip(zf, "test.txt", &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, 9));
-    
-    for(int i = 0; i < 1000000; i++) {
-      char bf[100];
-      sprintf(bf, "%d\r\n", i);
-      CHECK(!zipWriteInFileInZip(zf, bf, strlen(bf)));
-    }
-    
-    CHECK(!zipCloseFileInZip(zf));
-    CHECK(!zipClose(zf, NULL));
+// Things we generate:
+// * Process file, consisting of every step
+// * Some number of archive files
+// * Some number of other compressed datafiles, possibly
+// * State diff
+void generateArchive(const vector<Instruction> &inst, State *newstate) {
+  FILE *proc = fopen("temp/process", "w");
+  CHECK(proc);
+  for(int i = 0; i < inst.size(); i++) {
+    fprintf(proc, "%s\n", inst[i].processString().c_str());
+    printf("%s\n", inst[i].textout().c_str());
+    newstate->process(inst[i]);
   }
-  return 0;
+  fclose(proc);
+}
+
+int main() {
   
   readConfig("purebackup.conf");
   scanPaths();
@@ -464,10 +438,11 @@ int main() {
   
   State newstate = origstate;
   
-  for(int i = 0; i < inst.size(); i++) {
-    printf("%s\n", inst[i].textout().c_str());
-    newstate.process(inst[i]);
-  }
+  printf("Genarch\n");
+  
+  generateArchive(inst, &newstate);
+  
+  printf("Done genarch\n");
 
   {
     const map<string, Item> &lhs = newstate.getItemDb();
@@ -484,4 +459,33 @@ int main() {
   
   newstate.writeOut("state1");
 
+/*
+  {
+    zipFile zf = zipOpen("test.zip", APPEND_STATUS_CREATE);
+    CHECK(zf);
+    zip_fileinfo zfi;
+    zfi.tmz_date.tm_sec = 0;
+    zfi.tmz_date.tm_min = 0;
+    zfi.tmz_date.tm_hour = 0;
+    zfi.tmz_date.tm_mday = 1;
+    zfi.tmz_date.tm_mon = 0;
+    zfi.tmz_date.tm_year = 2006;
+    
+    zfi.dosDate = 0;
+    zfi.internal_fa = 0;
+    zfi.external_fa = 0;
+
+    CHECK(!zipOpenNewFileInZip(zf, "test.txt", &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, ));
+    
+    for(int i = 0; i < 1000000; i++) {
+      char bf[100];
+      sprintf(bf, "%d\r\n", i);
+      CHECK(!zipWriteInFileInZip(zf, bf, strlen(bf)));
+    }
+    
+    CHECK(!zipCloseFileInZip(zf));
+    CHECK(!zipClose(zf, NULL));
+  }
+  return 0;
+  */
 }

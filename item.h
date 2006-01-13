@@ -32,6 +32,8 @@ class Metadata {
 public:
   long long timestamp;
   /* permissions and stuff */
+
+  string toKvd() const;
 };
 
 inline bool operator==(const Metadata &lhs, const Metadata &rhs) {

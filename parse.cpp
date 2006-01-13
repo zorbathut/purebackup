@@ -147,6 +147,10 @@ void appendEscapedStr(string *stt, const string &esc) {
 }
 
 void putkvDataInline(ostream &ofs, const kvData &in, const string &mostimportant) {
+  ofs << getkvDataInlineString(in, mostimportant) << '\n';
+}
+
+string getkvDataInlineString(const kvData &in, const string &mostimportant) {
   string stt;
   appendEscapedStr(&stt, in.category);
   if(mostimportant != "") {
@@ -161,7 +165,7 @@ void putkvDataInline(ostream &ofs, const kvData &in, const string &mostimportant
     appendEscapedStr(&stt, itr->first);
     appendEscapedStr(&stt, itr->second);
   }
-  ofs << stt << '\n';
+  return stt;
 }
 
 int hexDigit(char pt) {

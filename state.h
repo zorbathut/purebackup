@@ -61,6 +61,7 @@ public:
   Metadata touch_meta;
 
   string textout() const;
+  string processString() const;
 };
 
 class State {

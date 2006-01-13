@@ -57,7 +57,7 @@ const Item *State::findItem(const string &name) const {
 
 void State::process(const Instruction &in) {
   if(in.type == TYPE_CREATE) {
-    // Completely ignore!
+    CHECK(0);
   } else if(in.type == TYPE_ROTATE) {
     vector<Item> srcs;
     for(int i = 0; i < in.rotate_paths.size(); i++) {
@@ -107,3 +107,57 @@ void State::writeOut(const string &fn) const {
   }
 }
 
+
+void dumpa(string *str, const string &txt, const vector<pair<bool, string> > &vek) {
+  *str += "  " + txt + "\n";
+  for(int i = 0; i < vek.size(); i++)
+    *str += StringPrintf("    %d:%s\n", vek[i].first, vek[i].second.c_str());
+}
+
+string Instruction::textout() const {
+  string rvx;
+  CHECK(type >= 0 && type < TYPE_END);
+  rvx = type_strs[type] + "\n";
+  dumpa(&rvx, "Depends:", depends);
+  dumpa(&rvx, "Removes:", removes);
+  dumpa(&rvx, "Creates:", creates);
+  return rvx;
+}
+
+string Instruction::processString() const {
+  kvData kvd;
+  if(type == TYPE_CREATE) {
+    CHECK(0);
+  } else if(type == TYPE_ROTATE) {
+    kvd.category = "rotate";
+    for(int i = 0; i < rotate_paths.size(); i++) {
+      kvd.kv[StringPrintf("src%02ddst%02d", i, (i + rotate_paths.size() - 1) % rotate_paths.size())] = rotate_paths[i].first;
+      kvd.kv[StringPrintf("meta%02d", i)] = rotate_paths[i].second.toKvd();
+    }
+  } else if(type == TYPE_DELETE) {
+    kvd.category = "delete";
+    kvd.kv["path"] = delete_path;
+  } else if(type == TYPE_COPY) {
+    kvd.category = "copy";
+    kvd.kv["source"] = copy_source;
+    kvd.kv["dest"] = copy_dest;
+    kvd.kv["dest_meta"] = copy_dest_meta.toKvd();
+  } else if(type == TYPE_APPEND) {
+    kvd.category = "append";
+    kvd.kv["path"] = append_path;
+    kvd.kv["meta"] = append_meta.toKvd();
+    kvd.kv["checksum"] = append_checksum.toString();
+  } else if(type == TYPE_STORE) {
+    kvd.category = "store";
+    kvd.kv["path"] = store_path;
+    kvd.kv["meta"] = store_meta.toKvd();
+    kvd.kv["checksum"] = store_checksum.toString();
+  } else if(type == TYPE_TOUCH) {
+    kvd.category = "touch";
+    kvd.kv["path"] = touch_path;
+    kvd.kv["meta"] = touch_meta.toKvd();
+  } else {
+    CHECK(0);
+  }
+  return getkvDataInlineString(kvd);
+}
