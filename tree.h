@@ -27,17 +27,16 @@
 
 using namespace std;
 
-enum { MTT_VIRTUAL, MTT_FILE, MTT_ITEM, MTT_END, MTT_UNINITTED };
+enum { MTT_VIRTUAL, MTT_IMPLIED, MTT_MASKED, MTT_FILE, MTT_ITEM, MTT_END, MTT_UNINITTED };
 
 class MountTree {
 public:
   int type;
   
-  map<string, MountTree> virtual_links;
+  map<string, MountTree> links;
 
   string file_source;
   bool file_scanned;
-  vector<pair<string, MountTree> > file_links;
 
   string item_fullpath;
   long long item_size;  // -1 if unknown

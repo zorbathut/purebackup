@@ -33,13 +33,21 @@ using namespace std;
 MountTree *getMountpointLocation(const string &loc) {
   const char *tpt = loc.c_str();
   MountTree *cpos = getRoot();
+  bool inRealTree = false;
   while(*tpt) {
     CHECK(*tpt == '/');
     tpt++;
     CHECK(*tpt);
-    
-    CHECK(cpos->type == MTT_UNINITTED || cpos->type == MTT_VIRTUAL);
-    cpos->type = MTT_VIRTUAL;
+  
+    if(cpos->type == MTT_UNINITTED) {
+      if(!inRealTree) {
+        cpos->type = MTT_VIRTUAL;
+      } else {
+        cpos->type = MTT_IMPLIED;
+      }
+    } else {
+      inRealTree = true;
+    }
     
     // isolate the next path component
     const char *tpn = strchr(tpt, '/');
@@ -47,7 +55,7 @@ MountTree *getMountpointLocation(const string &loc) {
       tpn = tpt + strlen(tpt);
     
     string linkage = string(tpt, tpn);
-    cpos = &cpos->virtual_links[linkage];
+    cpos = &cpos->links[linkage];
     
     tpt = tpn;
   }
@@ -55,7 +63,7 @@ MountTree *getMountpointLocation(const string &loc) {
 }
 
 void createMountpoint(const string &loc, const string &type, const string &source) {
-  MountTree *dpt =getMountpointLocation(loc);
+  MountTree *dpt = getMountpointLocation(loc);
   CHECK(dpt);
   CHECK(dpt->type == MTT_UNINITTED);
   
@@ -66,6 +74,15 @@ void createMountpoint(const string &loc, const string &type, const string &sourc
   } else {
     CHECK(0);
   }
+
+}
+
+void createMask(const string &loc) {
+  MountTree *dpt = getMountpointLocation(loc);
+  CHECK(dpt);
+  CHECK(dpt->type == MTT_UNINITTED);
+  
+  dpt->type = MTT_MASKED;
   
 }
 
@@ -85,6 +102,8 @@ void readConfig(const string &conffile) {
   while(getkvData(ifs, kvd)) {
     if(kvd.category == "mountpoint") {
       createMountpoint(kvd.consume("mount"), kvd.consume("type"), kvd.consume("source"));
+    } else if(kvd.category == "mask") {
+      createMask(kvd.consume("remove"));
     } else {
       CHECK(0);
     }

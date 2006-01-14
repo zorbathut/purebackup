@@ -32,32 +32,30 @@ bool MountTree::checkSanity() const {
   
   bool checked = false;
   
-  if(type == MTT_VIRTUAL) {
+  if(type == MTT_VIRTUAL || type == MTT_FILE || type == MTT_IMPLIED) {
     checked = true;
-    for(map<string, MountTree>::const_iterator itr = virtual_links.begin(); itr != virtual_links.end(); itr++) {
+    for(map<string, MountTree>::const_iterator itr = links.begin(); itr != links.end(); itr++) {
       if(itr->first == "." || itr->first == "..")
         return false;
       if(!itr->second.checkSanity())
         return false;
+      if(type == MTT_VIRTUAL) {
+        CHECK(itr->second.type == MTT_VIRTUAL || itr->second.type == MTT_FILE);
+      } else if(type == MTT_FILE) {
+        CHECK(itr->second.type == MTT_FILE || itr->second.type == MTT_ITEM || itr->second.type == MTT_MASKED || itr->second.type == MTT_IMPLIED);
+      } else if(type == MTT_IMPLIED) {
+        CHECK(itr->second.type == MTT_MASKED || itr->second.type == MTT_IMPLIED);
+      } else {
+        CHECK(0);
+      }
     }
   } else {
-    CHECK(virtual_links.size() == 0);
+    CHECK(links.size() == 0);
   }
   
-  if(type == MTT_FILE) {
+  if(type == MTT_MASKED) {
     checked = true;
-    if(!file_scanned)
-      CHECK(file_links.size() == 0);
-    CHECK(file_source.size());
-    set<string> nlk;
-    for(int i = 0; i < file_links.size(); i++) {
-      nlk.insert(file_links[i].first);
-      if(!file_links[i].second.checkSanity())
-        return false;
-    }
-    CHECK(nlk.size() == file_links.size());
   } else {
-    CHECK(file_source.size() == 0);
   }
   
   if(type == MTT_ITEM) {
@@ -74,19 +72,19 @@ bool MountTree::checkSanity() const {
 
 void MountTree::print(int indent) const {
   string spacing(indent, ' ');
-  if(type == MTT_VIRTUAL) {
-    for(map<string, MountTree>::const_iterator itr = virtual_links.begin(); itr != virtual_links.end(); itr++) {
+  if(type == MTT_VIRTUAL || type == MTT_FILE) {
+    for(map<string, MountTree>::const_iterator itr = links.begin(); itr != links.end(); itr++) {
       printf("%s%s\n", spacing.c_str(), itr->first.c_str());
       itr->second.print(indent + 2);
     }
-  } else if(type == MTT_FILE) {
-    if(file_scanned) {
-      for(int i = 0; i < file_links.size(); i++) {
-        printf("%s%s\n", spacing.c_str(), file_links[i].first.c_str());
-        file_links[i].second.print(indent + 2);
-      }
-    }
   } else if(type == MTT_ITEM) {
+  } else if(type == MTT_IMPLIED) {
+    for(map<string, MountTree>::const_iterator itr = links.begin(); itr != links.end(); itr++) {
+      printf("%s%s\n", spacing.c_str(), itr->first.c_str());
+      itr->second.print(indent + 2);
+    }
+  } else if(type == MTT_MASKED) {
+    printf("%sCULLED\n", spacing.c_str());
   } else {
     CHECK(0);
   }
@@ -124,7 +122,7 @@ vector<DirListOut> getDirList(const string &path) {
 
 void MountTree::scan() {
   if(type == MTT_VIRTUAL) {
-    for(map<string, MountTree>::iterator itr = virtual_links.begin(); itr != virtual_links.end(); itr++) {
+    for(map<string, MountTree>::iterator itr = links.begin(); itr != links.end(); itr++) {
       itr->second.scan();
     }
   } else if(type == MTT_FILE) {
@@ -133,19 +131,25 @@ void MountTree::scan() {
       vector<DirListOut> fils = getDirList(file_source);
       for(int i = 0; i < fils.size(); i++) {
         if(fils[i].directory) {
-          MountTree mt;
-          mt.type = MTT_FILE;
-          mt.file_source = fils[i].full_path;
-          mt.file_scanned = false;
-          file_links.push_back(make_pair(fils[i].itemname, mt));
-          file_links.back().second.scan();
+          if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
+            links[fils[i].itemname].type = MTT_FILE;
+            links[fils[i].itemname].file_source = fils[i].full_path;
+            links[fils[i].itemname].file_scanned = false;
+            links[fils[i].itemname].scan();
+          } else if(links[fils[i].itemname].type == MTT_MASKED) {
+          } else {
+            CHECK(0);
+          }
         } else {
-          MountTree mt;
-          mt.type = MTT_ITEM;
-          mt.item_fullpath = fils[i].full_path;
-          mt.item_size = fils[i].size;
-          mt.item_timestamp = fils[i].timestamp;
-          file_links.push_back(make_pair(fils[i].itemname, mt));
+          if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
+            links[fils[i].itemname].type = MTT_ITEM;
+            links[fils[i].itemname].item_fullpath = fils[i].full_path;
+            links[fils[i].itemname].item_size = fils[i].size;
+            links[fils[i].itemname].item_timestamp = fils[i].timestamp;
+          } else if(links[fils[i].itemname].type == MTT_MASKED) {
+          } else {
+            CHECK(0);
+          }
         }
       }
     }
@@ -155,15 +159,9 @@ void MountTree::scan() {
 }
 
 void MountTree::dumpItems(map<string, Item> *items, string cpath) const {
-  if(type == MTT_VIRTUAL) {
-    for(map<string, MountTree>::const_iterator itr = virtual_links.begin(); itr != virtual_links.end(); itr++) {
+  if(type == MTT_VIRTUAL || type == MTT_FILE) {
+    for(map<string, MountTree>::const_iterator itr = links.begin(); itr != links.end(); itr++) {
       itr->second.dumpItems(items, cpath + "/" + itr->first);
-    }
-  } else if(type == MTT_FILE) {
-    if(file_scanned) {
-      for(int i = 0; i < file_links.size(); i++) {
-        file_links[i].second.dumpItems(items, cpath + "/" + file_links[i].first);
-      }
     }
   } else if(type == MTT_ITEM) {
     Item nit;
@@ -173,6 +171,7 @@ void MountTree::dumpItems(map<string, Item> *items, string cpath) const {
     nit.local_path = item_fullpath;
     CHECK(!items->count(cpath));
     (*items)[cpath] = nit;
+  } else if(type == MTT_MASKED) {
   } else {
     CHECK(0);
   }
