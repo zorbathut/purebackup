@@ -1,0 +1,5 @@
+- State diffs
+- Samba support
+- Package sizing
+- Intelligent dealing with changing files
+- Dealing with CD stuff
