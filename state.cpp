@@ -72,6 +72,8 @@ void State::process(const Instruction &in) {
     CHECK(items.count(in.delete_path));
     items.erase(items.find(in.delete_path));
   } else if(in.type == TYPE_COPY) {
+    dprintf("Copying from %s\n", in.copy_source.c_str());
+    dprintf("%d\n", items.count(in.copy_source));
     CHECK(items.count(in.copy_source));
     items[in.copy_dest] = items[in.copy_source];
     items[in.copy_dest].metadata = in.copy_dest_meta;
@@ -143,15 +145,15 @@ string Instruction::processString() const {
     kvd.kv["dest"] = copy_dest;
     kvd.kv["dest_meta"] = copy_dest_meta.toKvd();
   } else if(type == TYPE_APPEND) {
-    kvd.category = "append";
+    kvd.category = "touch";
     kvd.kv["path"] = append_path;
     kvd.kv["meta"] = append_meta.toKvd();
-    kvd.kv["checksum"] = append_checksum.toString();
+    // TODO: Checksum?
   } else if(type == TYPE_STORE) {
-    kvd.category = "store";
+    kvd.category = "touch";
     kvd.kv["path"] = store_path;
     kvd.kv["meta"] = store_meta.toKvd();
-    kvd.kv["checksum"] = store_checksum.toString();
+    // TODO: Checksum?
   } else if(type == TYPE_TOUCH) {
     kvd.category = "touch";
     kvd.kv["path"] = touch_path;

@@ -43,6 +43,28 @@ bool operator==(const Checksum &lhs, const Checksum &rhs) {
   return !memcmp(lhs.bytes, rhs.bytes, sizeof(lhs.bytes));
 }
 
+void ItemShunt::seek(long long pos) {
+  fseeko(local_file, pos, SEEK_SET);
+}
+int ItemShunt::read(char *buffer, int len) {
+  return fread(buffer, 1, len, local_file);
+}
+
+ItemShunt::ItemShunt() {
+  local_file = NULL;
+}
+ItemShunt::~ItemShunt() {
+  fclose(local_file);
+}
+
+ItemShunt *Item::open() const {
+  CHECK(type == MTI_LOCAL);
+  ItemShunt *is = new ItemShunt;
+  is->local_file = fopen(local_path.c_str(), "rb");
+  CHECK(is->local_file);
+  return is;
+}
+
 Checksum Item::checksum() const {
   return checksumPart(size);
 }

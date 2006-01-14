@@ -51,11 +51,13 @@ public:
   long long append_size;
   Metadata append_meta;
   Checksum append_checksum;
+  const Item *append_source;
 
   string store_path;
   long long store_size;
   Metadata store_meta;
   Checksum store_checksum;
+  const Item *store_source;
   
   string touch_path;
   Metadata touch_meta;

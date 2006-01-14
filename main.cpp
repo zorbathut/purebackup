@@ -276,6 +276,22 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
   return kinstr;
 }
 
+void writeToZip(const Item *source, long long start, long long end, zipFile dest) {
+  printf("%lld, %lld\n", start, end);
+  ItemShunt *shunt = source->open();
+  shunt->seek(start);
+  char buffer[65536];
+  while(start != end) {
+    int desired = (int)min((long long)sizeof(buffer), end - start);
+    int dt = shunt->read(buffer, desired);
+    CHECK(dt == desired);
+    zipWriteInFileInZip(dest, buffer, dt);
+    start += dt;
+  }
+  CHECK(start == end);
+  delete shunt;
+}
+
 // Things we generate:
 // * Process file, consisting of every step
 // * Some number of archive files
@@ -284,11 +300,74 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
 void generateArchive(const vector<Instruction> &inst, State *newstate) {
   FILE *proc = fopen("temp/process", "w");
   CHECK(proc);
+  
+  int archivemode = -1;
+  zipFile archivefile = NULL;
+  
+  int archives = 0;
+  
   for(int i = 0; i < inst.size(); i++) {
-    fprintf(proc, "%s\n", inst[i].processString().c_str());
+    if(inst[i].type == archivemode) {
+      // Add data to archive, add an appropriate touch record
+      zip_fileinfo zfi;
+      zfi.dosDate = time(NULL);
+      zfi.internal_fa = 0;
+      zfi.external_fa = 0;
+      if(inst[i].type == TYPE_APPEND) {
+        CHECK(!zipOpenNewFileInZip(archivefile, inst[i].append_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
+        writeToZip(inst[i].append_source, newstate->findItem(inst[i].append_path)->size, inst[i].append_size, archivefile);
+        CHECK(!zipCloseFileInZip(archivefile));
+      } else {
+        CHECK(inst[i].type == TYPE_STORE);
+        CHECK(!zipOpenNewFileInZip(archivefile, inst[i].store_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
+        writeToZip(inst[i].store_source, 0, inst[i].store_size, archivefile);
+        CHECK(!zipCloseFileInZip(archivefile));
+      }
+      
+      // this should be a touch record
+      fprintf(proc, "%s\n", inst[i].processString().c_str());
+      printf("%s\n", inst[i].textout().c_str());
+      newstate->process(inst[i]);
+      continue;
+    }
     printf("%s\n", inst[i].textout().c_str());
     newstate->process(inst[i]);
+    if(archivemode != -1) {
+      // We're not appending to this archive anymore, so close it
+      CHECK(!zipClose(archivefile, NULL));
+      archivemode = -1;
+      archivefile = NULL;
+    }
+    if(inst[i].type == TYPE_APPEND || inst[i].type == TYPE_STORE) {
+      // Open archive, write appropriate record, then rewind one item so we don't duplicate code
+      string fname = StringPrintf("temp/%02d%s.zip", archives++, (inst[i].type == TYPE_APPEND) ? "append" : "store");
+      CHECK(archivefile = zipOpen(fname.c_str(), APPEND_STATUS_CREATE));
+      archivemode = inst[i].type;
+      
+      if(inst[i].type == TYPE_APPEND) {
+        kvData kvd;
+        kvd.category = "append";
+        kvd.kv["source"] = fname;
+        fprintf(proc, "%s\n", getkvDataInlineString(kvd).c_str());
+      } else {
+        kvData kvd;
+        kvd.category = "store";
+        kvd.kv["source"] = fname;
+        fprintf(proc, "%s\n", getkvDataInlineString(kvd).c_str());
+      }
+
+      printf("Rewind\n");
+      i--;
+      continue;
+    } else {
+      // Write instruction as normal, it's not an append or a store
+      fprintf(proc, "%s\n", inst[i].processString().c_str());
+    }
   }
+  
+  if(archivefile)
+    CHECK(!zipClose(archivefile, NULL));
+  
   fclose(proc);
 }
 
@@ -369,6 +448,7 @@ int main() {
           ti.append_size = ite.size;
           ti.append_meta = ite.metadata;
           ti.append_checksum = ite.checksum();
+          ti.append_source = &ite;
           inst.push_back(ti);
           got = true;
         }
@@ -412,6 +492,7 @@ int main() {
         ti.store_size = ite.size;
         ti.store_meta = ite.metadata;
         ti.store_checksum = ite.checksum();
+        ti.store_source = &ite;
         inst.push_back(ti);
         got = true;
       }
@@ -444,6 +525,7 @@ int main() {
   
   printf("Done genarch\n");
 
+/*
   {
     const map<string, Item> &lhs = newstate.getItemDb();
     const map<string, Item> &rhs = realitems;
@@ -456,6 +538,7 @@ int main() {
       CHECK(lhsi->second == rhsi->second);
     }
   }
+*/
   
   newstate.writeOut("state1");
 

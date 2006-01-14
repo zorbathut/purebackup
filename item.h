@@ -44,6 +44,21 @@ inline bool operator!=(const Metadata &lhs, const Metadata &rhs) {
   return !(lhs.timestamp == rhs.timestamp);
 }
 
+class ItemShunt {
+public:
+  FILE *local_file;
+
+  void seek(long long pos);
+  int read(char *buffer, int len);
+
+  ItemShunt();
+  ~ItemShunt();
+
+private:
+  ItemShunt(const ItemShunt &is); // do not implement
+  void operator=(const ItemShunt &is); // do not implement
+};
+
 class Item {
 public:
   int type;
@@ -51,6 +66,8 @@ public:
   Metadata metadata;
 
   string local_path;
+
+  ItemShunt *open() const;
 
   Checksum checksum() const;
   Checksum checksumPart(int len) const;
