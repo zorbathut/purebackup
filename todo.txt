@@ -1,5 +1,5 @@
 - State diffs
-- Samba support
+- Samba/SSH support
 - Package sizing
 - Intelligent dealing with changing files
 - Dealing with CD stuff
