@@ -316,7 +316,7 @@ void writeToZip(const Item *source, long long start, long long end, zipFile dest
 // * Some number of archive files
 // * Some number of other compressed datafiles, possibly
 // * State diff
-void generateArchive(const vector<Instruction> &inst, State *newstate) {
+void generateArchive(const vector<Instruction> &inst, State *newstate, const string &origstate) {
   FILE *proc = fopen("temp/process", "w");
   CHECK(proc);
   
@@ -388,6 +388,10 @@ void generateArchive(const vector<Instruction> &inst, State *newstate) {
     CHECK(!zipClose(archivefile, NULL));
   
   fclose(proc);
+  
+  newstate->writeOut("temp/newstate");
+  system(StringPrintf("diff %s %s > %s", origstate.c_str(), "temp/newstate", "temp/statediff").c_str());
+  unlink("temp/newstate");
 }
 
 int main() {
@@ -540,7 +544,7 @@ int main() {
   
   printf("Genarch\n");
   
-  generateArchive(inst, &newstate);
+  generateArchive(inst, &newstate, "state0");
   
   printf("Done genarch\n");
 
