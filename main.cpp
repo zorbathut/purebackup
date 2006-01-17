@@ -321,81 +321,55 @@ long long filesize(const string &fsz) {
   return stt.st_size;
 }
 
-// Things we generate:
-// * Process file, consisting of every step
-// * Some number of archive files
-// * Some number of other compressed datafiles, possibly
-// * State diff
-void generateArchive(const vector<Instruction> &inst, State *newstate, const string &origstate, long long size) {
+class ArchiveState {
+public:
   
-  // We estimate 500 bytes of overhead per item
-  const int usedperitem = 500;
+  void doInst(const Instruction &inst);
+
+  long long getCSize() const;
+
+  ArchiveState(const string &origstate, State *newstate);
+  ~ArchiveState();
+
+private:
   
-  long long used = 0;
-  
-  FILE *proc = fopen("temp/process", "w");
-  CHECK(proc);
-  
-  int archivemode = -1;
-  zipFile archivefile = NULL;
+  FILE *proc;
+  int archivemode;
+  zipFile archivefile;
   string fname;
+
+  State *newstate;
+
+  long long used;
+  int archives;
+
+  string origstate;
+};
+
+const int usedperitem = 500;
+
+void ArchiveState::doInst(const Instruction &inst) {
+
+  used += usedperitem;
   
-  int archives = 0;
+  if(archivemode != -1 && archivemode != inst.type) {
+    // We're not appending to this archive anymore, so close it
+    CHECK(!zipClose(archivefile, NULL));
+    archivemode = -1;
+    archivefile = NULL;
+    used += filesize(fname);
+  }
   
-  for(int i = 0; i < inst.size(); i++) {
-    long long tused = used;
-    if(archivefile)
-      tused += filesize(fname) + (1<<20); // Account for some buffer on the zip writing functions
-    if(inst[i].type == TYPE_APPEND) {
-      tused += inst[i].append_size - newstate->findItem(inst[i].append_path)->size;
-    } else if(inst[i].type == TYPE_STORE) {
-      tused += inst[i].store_size;
-    }
-    tused += usedperitem;
-    if(tused > size)
-      break;
+  if(inst.type == TYPE_APPEND || inst.type == TYPE_STORE) {
     
-    tused += usedperitem;
-    
-    if(inst[i].type == archivemode) {
-      // Add data to archive, add an appropriate touch record
-      zip_fileinfo zfi;
-      zfi.dosDate = time(NULL);
-      zfi.internal_fa = 0;
-      zfi.external_fa = 0;
-      if(inst[i].type == TYPE_APPEND) {
-        CHECK(!zipOpenNewFileInZip(archivefile, inst[i].append_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
-        writeToZip(inst[i].append_source, newstate->findItem(inst[i].append_path)->size, inst[i].append_size, archivefile);
-        CHECK(!zipCloseFileInZip(archivefile));
-      } else {
-        CHECK(inst[i].type == TYPE_STORE);
-        CHECK(!zipOpenNewFileInZip(archivefile, inst[i].store_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
-        writeToZip(inst[i].store_source, 0, inst[i].store_size, archivefile);
-        CHECK(!zipCloseFileInZip(archivefile));
-      }
+    if(archivemode == -1) {
       
-      // this should be a touch record
-      fprintf(proc, "%s\n", inst[i].processString().c_str());
-      printf("%s\n", inst[i].textout().c_str());
-      newstate->process(inst[i]);
-      continue;
-    }
-    printf("%s\n", inst[i].textout().c_str());
-    newstate->process(inst[i]);
-    if(archivemode != -1) {
-      // We're not appending to this archive anymore, so close it
-      CHECK(!zipClose(archivefile, NULL));
-      archivemode = -1;
-      archivefile = NULL;
-      tused += filesize(fname);
-    }
-    if(inst[i].type == TYPE_APPEND || inst[i].type == TYPE_STORE) {
       // Open archive, write appropriate record, then rewind one item so we don't duplicate code
-      fname = StringPrintf("temp/%02d%s.zip", archives++, (inst[i].type == TYPE_APPEND) ? "append" : "store");
+      fname = StringPrintf("temp/%02d%s.zip", archives++, (inst.type == TYPE_APPEND) ? "append" : "store");
       CHECK(archivefile = zipOpen(fname.c_str(), APPEND_STATUS_CREATE));
-      archivemode = inst[i].type;
+      archivemode = inst.type;
       
-      if(inst[i].type == TYPE_APPEND) {
+      if(inst.type == TYPE_APPEND) {
         kvData kvd;
         kvd.category = "append";
         kvd.kv["source"] = fname;
@@ -406,24 +380,96 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
         kvd.kv["source"] = fname;
         fprintf(proc, "%s\n", getkvDataInlineString(kvd).c_str());
       }
-
-      printf("Rewind\n");
-      i--;
-      continue;
-    } else {
-      // Write instruction as normal, it's not an append or a store
-      fprintf(proc, "%s\n", inst[i].processString().c_str());
+  
     }
+    
+    // Add data to archive, add an appropriate touch record
+    zip_fileinfo zfi;
+    zfi.dosDate = time(NULL);
+    zfi.internal_fa = 0;
+    zfi.external_fa = 0;
+    if(inst.type == TYPE_APPEND) {
+      CHECK(!zipOpenNewFileInZip(archivefile, inst.append_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
+      writeToZip(inst.append_source, newstate->findItem(inst.append_path)->size, inst.append_size, archivefile);
+      CHECK(!zipCloseFileInZip(archivefile));
+    } else {
+      CHECK(inst.type == TYPE_STORE);
+      CHECK(!zipOpenNewFileInZip(archivefile, inst.store_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
+      writeToZip(inst.store_source, 0, inst.store_size, archivefile);
+      CHECK(!zipCloseFileInZip(archivefile));
+    }
+    
+    // this should be a touch record
+    fprintf(proc, "%s\n", inst.processString().c_str());
+    printf("%s\n", inst.textout().c_str());
+    newstate->process(inst);
+    
+  } else {
+    // Write instruction as normal, it's not an append or a store
+    fprintf(proc, "%s\n", inst.processString().c_str());
+  }
+
+}
+
+long long ArchiveState::getCSize() const {
+  long long tused = used;
+  if(archivefile)
+    tused += filesize(fname) + (1<<20); // Account for some buffer on the zip writing functions
+  return tused;
+}
+
+ArchiveState::ArchiveState(const string &in_origstate, State *in_newstate) {
+  proc = fopen("temp/process", "w");
+  CHECK(proc);
+  
+  newstate = in_newstate;
+  
+  archivemode = -1;
+  archivefile = NULL;
+  
+  used = 0;
+  archives = 0;
+  
+  origstate = in_origstate;
+}
+
+ArchiveState::~ArchiveState() {
+  if(archivefile) {
+    CHECK(!zipClose(archivefile, NULL));
+    used += filesize(fname);
   }
   
-  if(archivefile)
-    CHECK(!zipClose(archivefile, NULL));
+  printf("Closing archive. Expected size: %lld\n", used);
   
   fclose(proc);
   
   newstate->writeOut("temp/newstate");
   system(StringPrintf("diff %s %s > %s", origstate.c_str(), "temp/newstate", "temp/statediff").c_str());
   unlink("temp/newstate");
+}
+  
+// Things we generate:
+// * Process file, consisting of every step
+// * Some number of archive files
+// * Some number of other compressed datafiles, possibly
+// * State diff
+void generateArchive(const vector<Instruction> &inst, State *newstate, const string &origstate, long long size) {
+  
+  ArchiveState ars(origstate, newstate);
+  
+  for(int i = 0; i < inst.size(); i++) {
+    long long tused = ars.getCSize();
+    if(inst[i].type == TYPE_APPEND) {
+      tused += inst[i].append_size - newstate->findItem(inst[i].append_path)->size;
+    } else if(inst[i].type == TYPE_STORE) {
+      tused += inst[i].store_size;
+    }
+    if(tused > size)
+      break;
+    
+    ars.doInst(inst[i]);
+  }
+
 }
 
 int main() {
@@ -576,7 +622,7 @@ int main() {
   
   printf("Genarch\n");
   
-  generateArchive(inst, &newstate, "state0", 300000000);
+  generateArchive(inst, &newstate, "state0", 100000000);
   
   printf("Done genarch\n");
 
