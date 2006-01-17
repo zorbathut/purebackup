@@ -26,6 +26,8 @@
 #include <string>
 #include <fstream>
 #include <set>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 using namespace std;
 
@@ -259,6 +261,7 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
       break;
     printf("Starting pass, %d instructions left\n", tcl);
     for(int i = 0; i < TYPE_END; i++) {
+      vector<Instruction> buckupd;
       for(int j = 0; j < buckets[i].size(); j++) {
         bool good = true;
         for(int k = 0; good && k < buckets[i][j].depends.size(); k++)
@@ -267,8 +270,10 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
         for(int k = 0; good && k < buckets[i][j].removes.size(); k++)
           if(!(leftToUse[buckets[i][j].removes[k]] == 0 || leftToUse[buckets[i][j].removes[k]] == 1 && count(buckets[i][j].depends.begin(), buckets[i][j].depends.end(), buckets[i][j].removes[k])))
             good = false;
-        if(!good)
+        if(!good) {
+          buckupd.push_back(buckets[i][j]);
           continue;
+        }
         //dprintf("%s\n", buckets[i][j].textout().c_str());
         for(int k = 0; k < buckets[i][j].depends.size(); k++)
           leftToUse[buckets[i][j].depends[k]]--;
@@ -283,9 +288,8 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
         }
         if(i != TYPE_CREATE)  // these don't get output
           kinstr.push_back(buckets[i][j]);
-        buckets[i].erase(buckets[i].begin() + j);
-        j--;
       }
+      buckets[i].swap(buckupd);
     }
     for(int i = 0; i < TYPE_END; i++)
       tcl -= buckets[i].size();
@@ -311,21 +315,48 @@ void writeToZip(const Item *source, long long start, long long end, zipFile dest
   delete shunt;
 }
 
+long long filesize(const string &fsz) {
+  struct stat stt;
+  CHECK(!stat(fsz.c_str(), &stt));
+  return stt.st_size;
+}
+
 // Things we generate:
 // * Process file, consisting of every step
 // * Some number of archive files
 // * Some number of other compressed datafiles, possibly
 // * State diff
-void generateArchive(const vector<Instruction> &inst, State *newstate, const string &origstate) {
+void generateArchive(const vector<Instruction> &inst, State *newstate, const string &origstate, long long size) {
+  
+  // We estimate 500 bytes of overhead per item
+  const int usedperitem = 500;
+  
+  long long used = 0;
+  
   FILE *proc = fopen("temp/process", "w");
   CHECK(proc);
   
   int archivemode = -1;
   zipFile archivefile = NULL;
+  string fname;
   
   int archives = 0;
   
   for(int i = 0; i < inst.size(); i++) {
+    long long tused = used;
+    if(archivefile)
+      tused += filesize(fname) + (1<<20); // Account for some buffer on the zip writing functions
+    if(inst[i].type == TYPE_APPEND) {
+      tused += inst[i].append_size - newstate->findItem(inst[i].append_path)->size;
+    } else if(inst[i].type == TYPE_STORE) {
+      tused += inst[i].store_size;
+    }
+    tused += usedperitem;
+    if(tused > size)
+      break;
+    
+    tused += usedperitem;
+    
     if(inst[i].type == archivemode) {
       // Add data to archive, add an appropriate touch record
       zip_fileinfo zfi;
@@ -356,10 +387,11 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
       CHECK(!zipClose(archivefile, NULL));
       archivemode = -1;
       archivefile = NULL;
+      tused += filesize(fname);
     }
     if(inst[i].type == TYPE_APPEND || inst[i].type == TYPE_STORE) {
       // Open archive, write appropriate record, then rewind one item so we don't duplicate code
-      string fname = StringPrintf("temp/%02d%s.zip", archives++, (inst[i].type == TYPE_APPEND) ? "append" : "store");
+      fname = StringPrintf("temp/%02d%s.zip", archives++, (inst[i].type == TYPE_APPEND) ? "append" : "store");
       CHECK(archivefile = zipOpen(fname.c_str(), APPEND_STATUS_CREATE));
       archivemode = inst[i].type;
       
@@ -544,7 +576,7 @@ int main() {
   
   printf("Genarch\n");
   
-  generateArchive(inst, &newstate, "state0");
+  generateArchive(inst, &newstate, "state0", 300000000);
   
   printf("Done genarch\n");
 
@@ -565,33 +597,4 @@ int main() {
   
   newstate.writeOut("state1");
 
-/*
-  {
-    zipFile zf = zipOpen("test.zip", APPEND_STATUS_CREATE);
-    CHECK(zf);
-    zip_fileinfo zfi;
-    zfi.tmz_date.tm_sec = 0;
-    zfi.tmz_date.tm_min = 0;
-    zfi.tmz_date.tm_hour = 0;
-    zfi.tmz_date.tm_mday = 1;
-    zfi.tmz_date.tm_mon = 0;
-    zfi.tmz_date.tm_year = 2006;
-    
-    zfi.dosDate = 0;
-    zfi.internal_fa = 0;
-    zfi.external_fa = 0;
-
-    CHECK(!zipOpenNewFileInZip(zf, "test.txt", &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, ));
-    
-    for(int i = 0; i < 1000000; i++) {
-      char bf[100];
-      sprintf(bf, "%d\r\n", i);
-      CHECK(!zipWriteInFileInZip(zf, bf, strlen(bf)));
-    }
-    
-    CHECK(!zipCloseFileInZip(zf));
-    CHECK(!zipClose(zf, NULL));
-  }
-  return 0;
-  */
 }
