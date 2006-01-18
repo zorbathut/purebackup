@@ -458,16 +458,39 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
   ArchiveState ars(origstate, newstate);
   
   for(int i = 0; i < inst.size(); i++) {
-    long long tused = ars.getCSize();
+    long long tused = ars.getCSize() + usedperitem;
+    long long nextitem;
     if(inst[i].type == TYPE_APPEND) {
-      tused += inst[i].append_size - newstate->findItem(inst[i].append_path)->size;
+      nextitem = inst[i].append_size - newstate->findItem(inst[i].append_path)->size;
     } else if(inst[i].type == TYPE_STORE) {
-      tused += inst[i].store_size;
+      nextitem = inst[i].store_size;
     }
-    if(tused > size)
+    if(tused + nextitem > size && size - tused > (1<<20) && (inst[i].type == TYPE_APPEND || inst[i].type == TYPE_STORE)) {
+      // We've got some space left, so let's see what we can do with it
+      // This code kind of relies on the "fact" that State won't have been changed yet with an Append or a Store
+      // This whole thing's really kind of hacky, I suppose.
+      dprintf("Doing nasty half-instruction, woooo\n");
+      if(inst[i].type == TYPE_APPEND) {
+        Instruction ninst = inst[i];
+        ninst.append_size = newstate->findItem(ninst.append_path)->size + (size - tused);
+        CHECK(ninst.append_size < inst[i].append_size);
+        ninst.append_checksum = ninst.append_source->checksumPart(ninst.append_size);
+        ars.doInst(ninst);
+      } else {
+        CHECK(inst[i].type == TYPE_STORE);
+        Instruction ninst = inst[i];
+        ninst.store_size = size - tused;
+        CHECK(ninst.store_size < inst[i].store_size);
+        ninst.store_checksum = ninst.store_source->checksumPart(ninst.store_size);
+        ars.doInst(ninst);
+      }
+      dprintf("Done nasty half-instruction\n");
       break;
-    
-    ars.doInst(inst[i]);
+    } else if(tused + nextitem > size) {
+      break;
+    } else {
+      ars.doInst(inst[i]);
+    }
   }
 
 }
@@ -622,7 +645,7 @@ int main() {
   
   printf("Genarch\n");
   
-  generateArchive(inst, &newstate, "state0", 100000000);
+  generateArchive(inst, &newstate, "state0", 300000000);
   
   printf("Done genarch\n");
 
