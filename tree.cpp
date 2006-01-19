@@ -19,9 +19,6 @@
 #include "tree.h"
 #include "debug.h"
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <dirent.h>
 #include <vector>
 #include <set>
 
@@ -88,36 +85,6 @@ void MountTree::print(int indent) const {
   } else {
     CHECK(0);
   }
-}
-
-struct DirListOut {
-public:
-  bool directory;
-  string full_path;
-  string itemname;
-  long long size; // -1 if unknown
-  long long timestamp; // -1 if unknown
-};
-
-vector<DirListOut> getDirList(const string &path) {
-  vector<DirListOut> rv;
-  DIR *od = opendir(path.c_str());
-  CHECK(od);
-  dirent *dire;
-  while(dire = readdir(od)) {
-    if(strcmp(dire->d_name, ".") == 0 || strcmp(dire->d_name, "..") == 0)
-      continue;
-    struct stat stt;
-    CHECK(!stat((path + "/" + dire->d_name).c_str(), &stt));
-    DirListOut dlo;
-    dlo.directory = stt.st_mode & S_IFDIR;
-    dlo.full_path = path + "/" + dire->d_name;
-    dlo.itemname = dire->d_name;
-    dlo.size = stt.st_size;
-    dlo.timestamp = stt.st_mtime;
-    rv.push_back(dlo);
-  }
-  return rv;
 }
 
 void MountTree::scan() {

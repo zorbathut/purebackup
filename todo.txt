@@ -1,4 +1,4 @@
-- File splitting
-- Intelligent dealing with changing files
 - Dealing with CD stuff
+- Improved text file output format
+- Intelligent dealing with changing files
 - Samba/SSH support

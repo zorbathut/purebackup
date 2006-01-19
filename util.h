@@ -20,6 +20,7 @@
 #define PUREBACKUP_UTIL
 
 #include <string>
+#include <vector>
 
 using namespace std;
 
@@ -36,5 +37,16 @@ long long atoll(const char *);
 Checksum atochecksum(const char *);
 
 string StringPrintf( const char *bort, ... ) __attribute__((format(printf,1,2)));
+
+struct DirListOut {
+public:
+  bool directory;
+  string full_path;
+  string itemname;
+  long long size;
+  long long timestamp;
+};
+
+vector<DirListOut> getDirList(const string &path);
 
 #endif

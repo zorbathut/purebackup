@@ -495,6 +495,33 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
 
 }
 
+long long getTotalSizeUsed(const string &path) {
+  vector<DirListOut> dlo = getDirList(path);
+  long long tsize = 0;
+  for(int i = 0; i < dlo.size(); i++) {
+    if(dlo[i].directory) {
+      tsize += getTotalSizeUsed(dlo[i].full_path);
+    } else {
+      tsize += dlo[i].size;
+    }
+  }
+  return tsize;
+}
+
+void inferDiscInfo() {
+  // For one thing, we don't know how much data we can actually hold
+  // For another thing, we don't know anything about our various overheads
+  // And for a third thing, we basically, essentially, don't know anything
+  // Why the hell do these tools suck so much?
+  
+  const string drive = "/cygdrive/d";
+  const long long drivesize = 650*1024*1024;
+  
+  long long usedsize = getTotalSizeUsed(drive);
+  printf("%lld bytes used\n", usedsize);
+  
+}
+
 int main() {
   
   readConfig("purebackup.conf");
@@ -645,7 +672,9 @@ int main() {
   
   printf("Genarch\n");
   
-  generateArchive(inst, &newstate, "state0", 300000000);
+  inferDiscInfo();
+  
+  //generateArchive(inst, &newstate, "state0", 300000000);
   
   printf("Done genarch\n");
 
