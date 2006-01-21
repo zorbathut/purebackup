@@ -87,7 +87,7 @@ void State::process(const Instruction &in) {
       items.erase(items.find(in.store_path));
     items[in.store_path].size = in.store_size;
     items[in.store_path].metadata = in.store_meta;
-    items[in.store_path].setTotalChecksum(in.store_checksum);
+    items[in.store_path].setTotalChecksum(in.store_source->checksumPart(in.store_size));
   } else if(in.type == TYPE_TOUCH) {
     CHECK(items.count(in.touch_path));
     items[in.touch_path].metadata = in.touch_meta;

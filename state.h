@@ -56,7 +56,6 @@ public:
   string store_path;
   long long store_size;
   Metadata store_meta;
-  Checksum store_checksum;
   const Item *store_source;
   
   string touch_path;

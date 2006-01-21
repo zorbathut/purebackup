@@ -300,7 +300,7 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
 }
 
 void writeToZip(const Item *source, long long start, long long end, zipFile dest) {
-  printf("%lld, %lld\n", start, end);
+  //printf("%lld, %lld\n", start, end);
   ItemShunt *shunt = source->open();
   shunt->seek(start);
   char buffer[65536];
@@ -401,7 +401,7 @@ void ArchiveState::doInst(const Instruction &inst) {
     
     // this should be a touch record
     fprintf(proc, "%s\n", inst.processString().c_str());
-    printf("%s\n", inst.textout().c_str());
+    //printf("%s\n", inst.textout().c_str());
     newstate->process(inst);
     
   } else {
@@ -459,6 +459,8 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
   
   for(int i = 0; i < inst.size(); i++) {
     long long tused = ars.getCSize() + usedperitem;
+    printf("%lld of %lld written (%.1f%%)\r", tused, size, (double)tused / size * 100);
+    fflush(stdout);
     long long nextitem;
     if(inst[i].type == TYPE_APPEND) {
       nextitem = inst[i].append_size - newstate->findItem(inst[i].append_path)->size;
@@ -481,7 +483,6 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
         Instruction ninst = inst[i];
         ninst.store_size = size - tused;
         CHECK(ninst.store_size < inst[i].store_size);
-        ninst.store_checksum = ninst.store_source->checksumPart(ninst.store_size);
         ars.doInst(ninst);
       }
       dprintf("Done nasty half-instruction\n");
@@ -508,25 +509,71 @@ long long getTotalSizeUsed(const string &path) {
   return tsize;
 }
 
-void inferDiscInfo() {
+pair<int, int> inferDiscInfo() {
   // For one thing, we don't know how much data we can actually hold
   // For another thing, we don't know anything about our various overheads
   // And for a third thing, we basically, essentially, don't know anything
   // Why the hell do these tools suck so much?
   
   const string drive = "/cygdrive/d";
-  const long long drivesize = 650*1024*1024;
+  const long long drivesize = 20*1024*1024;
   
   long long usedsize = getTotalSizeUsed(drive);
   printf("%lld bytes used\n", usedsize);
   
-}
+  vector<DirListOut> dlo = getDirList(drive);
+  
+  if(dlo.size() == 0)
+    return make_pair(-1, drivesize - usedsize);
+  
+  // We need a manifest and at least one directory for this to be a valid archive.
+  // If there is more than one directory, they'll need to be consecutively numbered.
+  // Technically, we should make sure the directories contain appropriate data,
+  // and that they are consecutive after the manifest.
+  bool foundManifest = false;
+  vector<int> dirnames;
+  
+  for(int i = 0; i < dlo.size(); i++) {
+    if(dlo[i].itemname == "manifest") {
+      CHECK(!dlo[i].directory);
+      CHECK(!foundManifest);
+      foundManifest = true;
+      continue;
+    }
+    
+    if(atoi(dlo[i].itemname.c_str()) != 0) {
+      for(int j = 0; j < dlo[i].itemname.size(); j++)
+        CHECK(isdigit(dlo[i].itemname[j]));
+      CHECK(dlo[i].directory);
+      dirnames.push_back(atoi(dlo[i].itemname.c_str()));
+    }
+    
+    CHECK(0);
+  }
+  
+  sort(dirnames.begin(), dirnames.end());
+  
+  for(int i = 0; i < dirnames.size() - 1; i++)
+    CHECK(dirnames[i] + 1 == dirnames[i + 1]);
+  
+  return make_pair(dirnames.back(), drivesize - usedsize);
+};
 
 int main() {
   
+  pair<int, int> inf = inferDiscInfo();
+  if(inf.second < 1048576) {
+    printf("New disc, fucker!\n");
+    return 0;
+  }
+  
+  printf("Reading config\n");
   readConfig("purebackup.conf");
+  
+  printf("Scanning items\n");
   scanPaths();
   
+  printf("Dumping items\n");
   map<string, Item> realitems;
   getRoot()->dumpItems(&realitems, "");
   dprintf("%d items found\n", realitems.size());
@@ -559,10 +606,13 @@ int main() {
     ftc.insert(itr->first);
   }
   
+  int itpos = 0;
   // FTC is the union of the files in realitems and origstate
   // citem is the items that we can look at
   // citemsizemap is the same, only organized by size
   for(set<string>::iterator itr = ftc.begin(); itr != ftc.end(); itr++) {
+    printf("%d/%d files examined\r", itpos++, ftc.size());
+    fflush(stdout);
     if(realitems.count(*itr)) {
       const Item &ite = realitems.find(*itr)->second;
       bool got = false;
@@ -572,13 +622,13 @@ int main() {
         const Item &pite = citem.find(make_pair(false, *itr))->second;
         if(ite.size == pite.size && ite.metadata == pite.metadata) {
           // It's identical!
-          printf("Preserve file %s\n", itr->c_str());
+          //printf("Preserve file %s\n", itr->c_str());
           fi.creates.push_back(make_pair(true, *itr));
           got = true;
         } else if(ite.size == pite.size && ite.checksum() == pite.checksum()) {
           // It's touched!
           CHECK(ite.metadata != pite.metadata);
-          printf("Touching file %s\n", itr->c_str());
+          //printf("Touching file %s\n", itr->c_str());
           Instruction ti;
           ti.type = TYPE_TOUCH;
           ti.creates.push_back(make_pair(true, *itr));
@@ -589,7 +639,7 @@ int main() {
           got = true;
         } else if(ite.size > pite.size && ite.checksumPart(pite.size) == pite.checksum()) {
           // It's appended!
-          printf("Appendination on %s, dude!\n", itr->c_str());
+          //printf("Appendination on %s, dude!\n", itr->c_str());
           Instruction ti;
           ti.type = TYPE_APPEND;
           ti.creates.push_back(make_pair(true, *itr));
@@ -608,13 +658,13 @@ int main() {
       // Okay, now we see if it's been copied from somewhere
       if(!got) {
         const vector<pair<bool, string> > &sli = citemsizemap[ite.size];
-        printf("Trying %d originals\n", sli.size());
+        //printf("Trying %d originals\n", sli.size());
         for(int k = 0; k < sli.size(); k++) {
           CHECK(ite.size == citem[sli[k]].size);
-          printf("Comparing with %d:%s\n", sli[k].first, sli[k].second.c_str());
-          printf("%s vs %s\n", ite.checksum().toString().c_str(), citem[sli[k]].checksum().toString().c_str());
+          //printf("Comparing with %d:%s\n", sli[k].first, sli[k].second.c_str());
+          //printf("%s vs %s\n", ite.checksum().toString().c_str(), citem[sli[k]].checksum().toString().c_str());
           if(ite.checksum() == citem[sli[k]].checksum()) {
-            printf("Holy crapcock! Copying %s from %s:%d! MADNESS\n", itr->c_str(), sli[k].second.c_str(), sli[k].first);
+            //printf("Holy crapcock! Copying %s from %s:%d! MADNESS\n", itr->c_str(), sli[k].second.c_str(), sli[k].first);
             Instruction ti;
             ti.type = TYPE_COPY;
             ti.creates.push_back(make_pair(true, *itr));
@@ -633,7 +683,7 @@ int main() {
       
       // And now we give up and just store it
       if(!got) {
-        printf("Storing %s from GALACTIC ETHER\n", itr->c_str());
+        //printf("Storing %s from GALACTIC ETHER\n", itr->c_str());
         Instruction ti;
         ti.type = TYPE_STORE;
         ti.creates.push_back(make_pair(true, *itr));
@@ -642,12 +692,11 @@ int main() {
         ti.store_path = *itr;
         ti.store_size = ite.size;
         ti.store_meta = ite.metadata;
-        ti.store_checksum = ite.checksum();
         ti.store_source = &ite;
         inst.push_back(ti);
         got = true;
       }
-      
+       
       CHECK(got);
       
       citem[make_pair(true, *itr)] = ite;
@@ -655,7 +704,7 @@ int main() {
       
     } else {
       CHECK(citem.count(make_pair(false, *itr)));
-      printf("Delete file %s\n", itr->c_str());
+      //printf("Delete file %s\n", itr->c_str());
       Instruction ti;
       ti.type = TYPE_DELETE;
       ti.delete_path = *itr;
@@ -674,7 +723,7 @@ int main() {
   
   inferDiscInfo();
   
-  //generateArchive(inst, &newstate, "state0", 300000000);
+  generateArchive(inst, &newstate, "state0", inf.second);
   
   printf("Done genarch\n");
 

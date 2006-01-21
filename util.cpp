@@ -67,12 +67,15 @@ string StringPrintf( const char *bort, ... ) {
 vector<DirListOut> getDirList(const string &path) {
   vector<DirListOut> rv;
   DIR *od = opendir(path.c_str());
+  if(!od)
+    return vector<DirListOut>();
   CHECK(od);
   dirent *dire;
   while(dire = readdir(od)) {
     if(strcmp(dire->d_name, ".") == 0 || strcmp(dire->d_name, "..") == 0)
       continue;
     struct stat stt;
+    //printf("%s\n", (path + "/" + dire->d_name).c_str());
     CHECK(!stat((path + "/" + dire->d_name).c_str(), &stt));
     DirListOut dlo;
     dlo.directory = stt.st_mode & S_IFDIR;
