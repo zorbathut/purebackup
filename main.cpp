@@ -28,6 +28,7 @@
 #include <set>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <openssl/sha.h>
 
 using namespace std;
 
@@ -299,20 +300,38 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
   return kinstr;
 }
 
-void writeToZip(const Item *source, long long start, long long end, zipFile dest) {
+Checksum writeToZip(const Item *source, long long start, long long end, zipFile dest) {
+  // One problem here - we have to read the entire file just to get the right checksum. This is something that should be fixed in the future, but isn't yet, and I'm not quite sure how.
   //printf("%lld, %lld\n", start, end);
+  SHA_CTX c;
+  SHA1_Init(&c);
   ItemShunt *shunt = source->open();
-  shunt->seek(start);
-  char buffer[65536];
-  while(start != end) {
-    int desired = (int)min((long long)sizeof(buffer), end - start);
-    int dt = shunt->read(buffer, desired);
-    CHECK(dt == desired);
-    zipWriteInFileInZip(dest, buffer, dt);
-    start += dt;
+  CHECK(shunt);
+  long long pos = 0;
+  while(pos != start) {
+    char buf[1024*128];
+    int desired = (int)min((long long)sizeof(buf), start - pos);
+    int rv = shunt->read(buf, desired);
+    CHECK(rv == desired);
+    pos += rv;
+    SHA1_Update(&c, buf, rv);
   }
-  CHECK(start == end);
+  
+  while(pos != end) {
+    char buf[1024*128];
+    int desired = (int)min((long long)sizeof(buf), end - pos);
+    int rv = shunt->read(buf, desired);
+    CHECK(rv == desired);
+    pos += rv;
+    zipWriteInFileInZip(dest, buf, rv);
+    SHA1_Update(&c, buf, rv);
+  }
+  
   delete shunt;
+  
+  Checksum csr;
+  SHA1_Final(csr.bytes, &c);
+  return csr;
 }
 
 long long filesize(const string &fsz) {
@@ -392,12 +411,14 @@ void ArchiveState::doInst(const Instruction &inst) {
     zfi.external_fa = 0;
     if(inst.type == TYPE_APPEND) {
       CHECK(!zipOpenNewFileInZip(archivefile, inst.append_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
-      writeToZip(inst.append_source, newstate->findItem(inst.append_path)->size, inst.append_size, archivefile);
+      Checksum rvx = writeToZip(inst.append_source, newstate->findItem(inst.append_path)->size, inst.append_size, archivefile);
+      CHECK(rvx == inst.append_checksum);
       CHECK(!zipCloseFileInZip(archivefile));
     } else {
       CHECK(inst.type == TYPE_STORE);
       CHECK(!zipOpenNewFileInZip(archivefile, inst.store_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
-      writeToZip(inst.store_source, 0, inst.store_size, archivefile);
+      Checksum rvx = writeToZip(inst.store_source, 0, inst.store_size, archivefile);
+      CHECK(rvx == inst.store_source->checksum());  // since this is where the "checksum" comes from in the file
       CHECK(!zipCloseFileInZip(archivefile));
     }
     
@@ -747,7 +768,12 @@ int main() {
   
   printf("Genarch\n");
   
-  //system("rm -rf temp");  // this is obviously dangerous, dur
+  if(inst.size() == 0) {
+    printf("No changes!\n");
+    return 0;
+  }
+  
+  system("rm -rf temp");  // this is obviously dangerous, dur
   system("mkdir temp");
   
   printf("Generating archive of at most %d bytes\n", inf.second);
