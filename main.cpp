@@ -328,7 +328,7 @@ public:
 
   long long getCSize() const;
 
-  ArchiveState(const string &origstate, State *newstate);
+  ArchiveState(const string &origstate, State *newstate, const string &destpath);
   ~ArchiveState();
 
 private:
@@ -339,6 +339,7 @@ private:
   string fname;
 
   State *newstate;
+  string destpath;
 
   long long used;
   int archives;
@@ -365,7 +366,7 @@ void ArchiveState::doInst(const Instruction &inst) {
     if(archivemode == -1) {
       
       // Open archive, write appropriate record, then rewind one item so we don't duplicate code
-      fname = StringPrintf("temp/%02d%s.zip", archives++, (inst.type == TYPE_APPEND) ? "append" : "store");
+      fname = StringPrintf("%s/%02d%s.zip", destpath.c_str(), archives++, (inst.type == TYPE_APPEND) ? "append" : "store");
       CHECK(archivefile = zipOpen(fname.c_str(), APPEND_STATUS_CREATE));
       archivemode = inst.type;
       
@@ -418,11 +419,12 @@ long long ArchiveState::getCSize() const {
   return tused;
 }
 
-ArchiveState::ArchiveState(const string &in_origstate, State *in_newstate) {
-  proc = fopen("temp/process", "w");
+ArchiveState::ArchiveState(const string &in_origstate, State *in_newstate, const string &in_destpath) {
+  proc = fopen(StringPrintf("%s/process", in_destpath.c_str()).c_str(), "w");
   CHECK(proc);
   
   newstate = in_newstate;
+  destpath = in_destpath;
   
   archivemode = -1;
   archivefile = NULL;
@@ -443,9 +445,9 @@ ArchiveState::~ArchiveState() {
   
   fclose(proc);
   
-  newstate->writeOut("temp/newstate");
-  system(StringPrintf("diff %s %s > %s", origstate.c_str(), "temp/newstate", "temp/statediff").c_str());
-  unlink("temp/newstate");
+  newstate->writeOut(StringPrintf("%s/newstate", destpath.c_str()));
+  system(StringPrintf("diff %s %s/newstate > %s/statediff", origstate.c_str(), destpath.c_str(), destpath.c_str()).c_str());
+  unlink(StringPrintf("%s/newstate", destpath.c_str()).c_str());
 }
   
 // Things we generate:
@@ -453,9 +455,9 @@ ArchiveState::~ArchiveState() {
 // * Some number of archive files
 // * Some number of other compressed datafiles, possibly
 // * State diff
-void generateArchive(const vector<Instruction> &inst, State *newstate, const string &origstate, long long size) {
+void generateArchive(const vector<Instruction> &inst, State *newstate, const string &origstate, long long size, const string &destpath) {
   
-  ArchiveState ars(origstate, newstate);
+  ArchiveState ars(origstate, newstate, destpath);
   
   for(int i = 0; i < inst.size(); i++) {
     long long tused = ars.getCSize() + usedperitem;
@@ -578,8 +580,11 @@ int main() {
   getRoot()->dumpItems(&realitems, "");
   dprintf("%d items found\n", realitems.size());
   
+  const string curstate = "state0";
+  const int curstateid = 0;
+  
   State origstate;
-  origstate.readFile("state0");
+  origstate.readFile(curstate);
   
   map<pair<bool, string>, Item> citem;
   map<long long, vector<pair<bool, string> > > citemsizemap;
@@ -721,9 +726,24 @@ int main() {
   
   printf("Genarch\n");
   
-  inferDiscInfo();
+  system("rm -rf temp");  // this is obviously dangerous, dur
+  system("mkdir temp");
   
-  generateArchive(inst, &newstate, "state0", inf.second);
+  if(inf.first == -1) {
+    // We need to copy our original state to the root, then create our first patch
+    system(StringPrintf("cp %s %s", curstate.c_str(), "temp/manifest").c_str()); // note: this is buggy and probably a security hole
+    string destpath = StringPrintf("temp/%08d", curstateid + 1);
+    system(StringPrintf("mkdir %s", destpath.c_str()).c_str());
+    
+    generateArchive(inst, &newstate, curstate, inf.second, destpath);
+  } else {
+    // We don't. (Duh.)
+    CHECK(inf.first == curstateid);
+    string destpath = StringPrintf("temp/%08d", curstateid + 1);
+    system(StringPrintf("mkdir %s", destpath.c_str()).c_str());
+    
+    generateArchive(inst, &newstate, curstate, inf.second, destpath);
+  }
   
   printf("Done genarch\n");
 
