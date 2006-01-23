@@ -350,7 +350,7 @@ private:
 const int usedperitem = 500;
 
 void ArchiveState::doInst(const Instruction &inst) {
-
+  
   used += usedperitem;
   
   if(archivemode != -1 && archivemode != inst.type) {
@@ -360,25 +360,26 @@ void ArchiveState::doInst(const Instruction &inst) {
     archivefile = NULL;
     used += filesize(fname);
   }
-  
+
   if(inst.type == TYPE_APPEND || inst.type == TYPE_STORE) {
     
     if(archivemode == -1) {
       
       // Open archive, write appropriate record, then rewind one item so we don't duplicate code
-      fname = StringPrintf("%s/%02d%s.zip", destpath.c_str(), archives++, (inst.type == TYPE_APPEND) ? "append" : "store");
+      string pfname = StringPrintf("%02d%s.zip", archives++, (inst.type == TYPE_APPEND) ? "append" : "store");
+      fname = StringPrintf("%s/%s", destpath.c_str(), pfname.c_str());
       CHECK(archivefile = zipOpen(fname.c_str(), APPEND_STATUS_CREATE));
       archivemode = inst.type;
       
       if(inst.type == TYPE_APPEND) {
         kvData kvd;
         kvd.category = "append";
-        kvd.kv["source"] = fname;
+        kvd.kv["source"] = pfname;
         fprintf(proc, "%s\n", getkvDataInlineString(kvd).c_str());
       } else {
         kvData kvd;
         kvd.category = "store";
-        kvd.kv["source"] = fname;
+        kvd.kv["source"] = pfname;
         fprintf(proc, "%s\n", getkvDataInlineString(kvd).c_str());
       }
   
@@ -403,12 +404,13 @@ void ArchiveState::doInst(const Instruction &inst) {
     // this should be a touch record
     fprintf(proc, "%s\n", inst.processString().c_str());
     //printf("%s\n", inst.textout().c_str());
-    newstate->process(inst);
     
   } else {
     // Write instruction as normal, it's not an append or a store
     fprintf(proc, "%s\n", inst.processString().c_str());
   }
+  
+  newstate->process(inst);
 
 }
 
@@ -457,6 +459,8 @@ ArchiveState::~ArchiveState() {
 // * State diff
 void generateArchive(const vector<Instruction> &inst, State *newstate, const string &origstate, long long size, const string &destpath) {
   
+  dprintf("Starting archive - %d instructions\n", inst.size());
+  
   ArchiveState ars(origstate, newstate, destpath);
   
   for(int i = 0; i < inst.size(); i++) {
@@ -468,6 +472,8 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
       nextitem = inst[i].append_size - newstate->findItem(inst[i].append_path)->size;
     } else if(inst[i].type == TYPE_STORE) {
       nextitem = inst[i].store_size;
+    } else {
+      nextitem = usedperitem;
     }
     if(tused + nextitem > size && size - tused > (1<<20) && (inst[i].type == TYPE_APPEND || inst[i].type == TYPE_STORE)) {
       // We've got some space left, so let's see what we can do with it
@@ -518,7 +524,7 @@ pair<int, int> inferDiscInfo() {
   // Why the hell do these tools suck so much?
   
   const string drive = "/cygdrive/d";
-  const long long drivesize = 20*1024*1024;
+  const long long drivesize = 100*1024*1024;
   
   long long usedsize = getTotalSizeUsed(drive);
   printf("%lld bytes used\n", usedsize);
@@ -580,8 +586,23 @@ int main() {
   getRoot()->dumpItems(&realitems, "");
   dprintf("%d items found\n", realitems.size());
   
-  const string curstate = "state0";
-  const int curstateid = 0;
+  int curstateid;
+  string curstate;
+  string nextstate;
+  
+  {
+    FILE *vidi = fopen("states/current", "r");
+    curstateid = 0;
+    if(vidi) {
+      fscanf(vidi, "%d", &curstateid);
+      fclose(vidi);
+    } else {
+      system("touch states/00000000");
+    }
+    
+    curstate = StringPrintf("states/%08d", curstateid);
+    nextstate = StringPrintf("states/%08d", curstateid + 1);
+  }
   
   State origstate;
   origstate.readFile(curstate);
@@ -726,8 +747,10 @@ int main() {
   
   printf("Genarch\n");
   
-  system("rm -rf temp");  // this is obviously dangerous, dur
+  //system("rm -rf temp");  // this is obviously dangerous, dur
   system("mkdir temp");
+  
+  printf("Generating archive of at most %d bytes\n", inf.second);
   
   if(inf.first == -1) {
     // We need to copy our original state to the root, then create our first patch
@@ -762,6 +785,11 @@ int main() {
   }
 */
   
-  newstate.writeOut("state1");
+  newstate.writeOut(nextstate);
+  
+  FILE *curv = fopen("states/current", "w");
+  CHECK(curv);
+  fprintf(curv, "%d\n", curstateid + 1);
+  fclose(curv);
 
 }

@@ -1,4 +1,4 @@
 - Dealing with CD stuff
 - Improved text file output format
-- Intelligent dealing with changing files
+- Saner error handling, make triplesure things don't break or change unexpectedly
 - Samba/SSH support

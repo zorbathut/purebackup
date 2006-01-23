@@ -76,7 +76,10 @@ vector<DirListOut> getDirList(const string &path) {
       continue;
     struct stat stt;
     //printf("%s\n", (path + "/" + dire->d_name).c_str());
-    CHECK(!stat((path + "/" + dire->d_name).c_str(), &stt));
+    if(stat((path + "/" + dire->d_name).c_str(), &stt)) {
+      printf("Error reading %s\n", (path + "/" + dire->d_name).c_str());
+      CHECK(0);
+    }
     DirListOut dlo;
     dlo.directory = stt.st_mode & S_IFDIR;
     dlo.full_path = path + "/" + dire->d_name;

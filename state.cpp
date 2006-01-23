@@ -64,7 +64,7 @@ void State::process(const Instruction &in) {
       CHECK(items.count(in.rotate_paths[i].first));
       srcs.push_back(items[in.rotate_paths[i].first]);
       srcs.back().metadata = in.rotate_paths[i].second;
-      printf("%lld %s\n", srcs.back().metadata.timestamp, srcs.back().checksum().toString().c_str());
+      //printf("%lld %s\n", srcs.back().metadata.timestamp, srcs.back().checksum().toString().c_str());
     }
     for(int i = 0; i < in.rotate_paths.size(); i++)
       items[in.rotate_paths[(i + 1) % in.rotate_paths.size()].first] = srcs[i];
@@ -72,8 +72,8 @@ void State::process(const Instruction &in) {
     CHECK(items.count(in.delete_path));
     items.erase(items.find(in.delete_path));
   } else if(in.type == TYPE_COPY) {
-    dprintf("Copying from %s\n", in.copy_source.c_str());
-    dprintf("%d\n", items.count(in.copy_source));
+    //dprintf("Copying from %s\n", in.copy_source.c_str());
+    //dprintf("%d\n", items.count(in.copy_source));
     CHECK(items.count(in.copy_source));
     items[in.copy_dest] = items[in.copy_source];
     items[in.copy_dest].metadata = in.copy_dest_meta;
