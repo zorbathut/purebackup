@@ -120,6 +120,22 @@ istream &getkvData(istream &ifs, kvData &out) {
   return ifs; // this will be failure
 }
 
+void putkvDataInline(ostream &ofs, const kvData &in, const string &mostimportant) {
+  ofs << getkvDataInlineString(in, mostimportant) << '\n';
+}
+
+// Data format:
+// keyword: key="value" key="value"
+// Keyword and key are alphanumeric or underscore strictly
+// Value is pure binary, escaped as necessary.
+
+bool isAlphanumeric(const string &str) {
+  for(int i = 0; i < str.size(); i++)
+    if(!isalpha(str[i]) && !isdigit(str[i]) && str[i] != '_')
+      return false;
+  return true;
+}
+
 char toHexChar(int in) {
   CHECK(in >= 0 && in < 16);
   if(in < 10)
@@ -129,40 +145,39 @@ char toHexChar(int in) {
 }
 
 void appendEscapedStr(string *stt, const string &esc) {
-  if(stt->size())
-    (*stt) += ' ';
+  (*stt) += '"';
   for(int i = 0; i < esc.size(); i++) {
-    if(esc[i] == ' ') {
-      (*stt) += "\\ ";
+    if(esc[i] == '"') {
+      (*stt) += "\\\"";
     } else if(esc[i] == '\n') {
       (*stt) += "\\n";
     } else if(esc[i] == '\\') {
       (*stt) += "\\\\";
-    } else if(esc[i] > 32 && esc[i] < 127) {
+    } else if(esc[i] >= 32 && esc[i] < 127) {
       (*stt) += esc[i];
     } else {
-      (*stt) += "\\x" + toHexChar(esc[i] / 16) + toHexChar(esc[i] % 16);
+      (*stt) += string("\\x") + toHexChar(esc[i] / 16) + toHexChar(esc[i] % 16);
     }
   }
-}
-
-void putkvDataInline(ostream &ofs, const kvData &in, const string &mostimportant) {
-  ofs << getkvDataInlineString(in, mostimportant) << '\n';
+  (*stt) += '"';
 }
 
 string getkvDataInlineString(const kvData &in, const string &mostimportant) {
   string stt;
-  appendEscapedStr(&stt, in.category);
+  CHECK(isAlphanumeric(in.category));
+  stt += in.category + ":";
   if(mostimportant != "") {
     CHECK(in.kv.count(mostimportant));
-    appendEscapedStr(&stt, mostimportant);
+    CHECK(isAlphanumeric(mostimportant));
+    stt += " " + mostimportant + "=";
     appendEscapedStr(&stt, in.kv.find(mostimportant)->second);
   }
   for(map<string, string>::const_iterator itr = in.kv.begin(); itr != in.kv.end(); itr++) {
     CHECK(itr->first.size());
     if(itr->first == mostimportant)
       continue;
-    appendEscapedStr(&stt, itr->first);
+    CHECK(isAlphanumeric(itr->first));
+    stt += " " + itr->first + "=";
     appendEscapedStr(&stt, itr->second);
   }
   return stt;
@@ -195,9 +210,11 @@ int parseHex(const char **pt) {
   }
 }
 
-string parseWord(const char **pt) {
+string parseQuotedWord(const char **pt) {
   string oot;
-  while(**pt && **pt != ' ') {
+  CHECK(**pt == '"');
+  (*pt)++;
+  while(**pt && **pt != '"') {
     if(**pt == '\\') {
       // escape character
       (*pt)++;
@@ -205,22 +222,36 @@ string parseWord(const char **pt) {
         oot += '\\';
       } else if(**pt == 'n') {
         oot += '\n';
-      } else if(**pt == ' ') {
-        oot += ' ';
+      } else if(**pt == '"') {
+        oot += '"';
       } else if(**pt == 'x') {
         (*pt)++;
         oot += parseHex(pt);
       } else {
         CHECK(0);
       }
-    } else if(**pt > 32 && **pt < 127) {
+    } else if(**pt >= 32 && **pt < 127) {
       // standard ascii
       oot += **pt;
     } else {
+      printf("Character %d, aka %c\n", **pt, **pt);
       CHECK(0);
     }
     (*pt)++;
   }
+  CHECK(**pt == '"');
+  (*pt)++;
+  return oot;
+}
+
+string parseWord(const char **pt, char endchar) {
+  string oot;
+  while(**pt && **pt != endchar) {
+    oot += **pt;
+    (*pt)++;
+  }
+  CHECK(**pt == endchar);
+  (*pt)++;
   return oot;
 }
 
@@ -232,16 +263,14 @@ istream &getkvDataInline(istream &ifs, kvData &out) {
   if(!ifs)
     return ifs; // failure, end of universe, sanity halted!
   const char *pt = line.c_str();
-  out.category = parseWord(&pt);
+  out.category = parseWord(&pt, ':');
   while(*pt) {
     CHECK(*pt == ' ');
     pt++;
-    string key = parseWord(&pt);
-    CHECK(*pt == ' ');
-    pt++;
-    string value = parseWord(&pt);
+    string key = parseWord(&pt, '=');
+    string value = parseQuotedWord(&pt);
     CHECK(!out.kv.count(key));
     out.kv[key] = value;
   }
-  return ifs; // this will be failure
+  return ifs; // this may be failure, if we're at the end
 }

@@ -418,7 +418,7 @@ void ArchiveState::doInst(const Instruction &inst) {
       CHECK(inst.type == TYPE_STORE);
       CHECK(!zipOpenNewFileInZip(archivefile, inst.store_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
       Checksum rvx = writeToZip(inst.store_source, 0, inst.store_size, archivefile);
-      CHECK(rvx == inst.store_source->checksum());  // since this is where the "checksum" comes from in the file
+      CHECK(rvx == inst.store_source->checksumPart(inst.store_size));  // since this is where the "checksum" comes from in the file
       CHECK(!zipCloseFileInZip(archivefile));
     }
     
