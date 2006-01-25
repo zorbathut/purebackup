@@ -478,7 +478,7 @@ ArchiveState::~ArchiveState() {
 // * Some number of archive files
 // * Some number of other compressed datafiles, possibly
 // * State diff
-void generateArchive(const vector<Instruction> &inst, State *newstate, const string &origstate, long long size, const string &destpath) {
+void generateArchive(const vector<Instruction> &inst, State *newstate, const string &origstate, long long size, const string &destpath, bool *spaceleft) {
   
   dprintf("Starting archive - %d instructions\n", inst.size());
   
@@ -522,6 +522,8 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
       ars.doInst(inst[i]);
     }
   }
+  
+  *spaceleft = ars.getCSize() + 10*1024*1024 < size;
 
 }
 
@@ -773,10 +775,25 @@ int main() {
     return 0;
   }
   
+  {
+    long long archsize = 0;
+    for(int i = 0; i < inst.size(); i++) {
+      archsize += usedperitem;
+      if(inst[i].type == TYPE_APPEND) {
+        archsize += inst[i].append_size - newstate.findItem(inst[i].append_path)->size;
+      } else if(inst[i].type == TYPE_STORE) {
+        archsize += inst[i].store_size;
+      }
+    }
+    printf("Total of %lld bytes left! (%lldmb)\n", archsize, archsize >> 20);
+  }
+  
   system("rm -rf temp");  // this is obviously dangerous, dur
   system("mkdir temp");
   
   printf("Generating archive of at most %d bytes\n", inf.second);
+  
+  bool spaceleft;
   
   if(inf.first == -1) {
     // We need to copy our original state to the root, then create our first patch
@@ -784,14 +801,14 @@ int main() {
     string destpath = StringPrintf("temp/%08d", curstateid + 1);
     system(StringPrintf("mkdir %s", destpath.c_str()).c_str());
     
-    generateArchive(inst, &newstate, curstate, inf.second, destpath);
+    generateArchive(inst, &newstate, curstate, inf.second, destpath, &spaceleft);
   } else {
     // We don't. (Duh.)
     CHECK(inf.first == curstateid);
     string destpath = StringPrintf("temp/%08d", curstateid + 1);
     system(StringPrintf("mkdir %s", destpath.c_str()).c_str());
     
-    generateArchive(inst, &newstate, curstate, inf.second, destpath);
+    generateArchive(inst, &newstate, curstate, inf.second, destpath, &spaceleft);
   }
   
   printf("Done genarch\n");
@@ -810,6 +827,30 @@ int main() {
     }
   }
 */
+  
+  /*
+  if(inf.first == -1) {
+    // We're not continuing a multisession CD
+    system("mkisofs -J -r -o image.iso temp");
+  } else {
+    // We are continuing a multisession CD
+    system("mkisofs -J -r -C `dvdrecord dev=1,0,0 -msinfo`-o image.iso temp");
+  }
+  
+  spaceleft = true;
+  if(spaceleft) {
+    // We're leaving multisession space open
+    system("dvdrecord dev=1,0,0 -v -eject speed=40 fs=16m -multi image.iso");
+  } else {
+    // We're closing the CD
+    system("dvdrecord dev=1,0,0 -v -eject speed=40 fs=16m image.iso");
+  }*/
+  
+  if(spaceleft) {
+    printf("Burn it now, and leave multisession open!\n");
+  } else {
+    printf("Burn it now, and close the CD!\n");
+  }
   
   newstate.writeOut(nextstate);
   

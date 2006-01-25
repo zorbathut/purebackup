@@ -22,6 +22,8 @@
 #include <vector>
 #include <set>
 
+#include <silcincludes.h>
+
 using namespace std;
 
 bool MountTree::checkSanity() const {

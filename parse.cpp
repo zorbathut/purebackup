@@ -259,7 +259,7 @@ istream &getkvDataInline(istream &ifs, kvData &out) {
   out.kv.clear();
   out.category.clear();
   string line;
-  getLineStripped(ifs, line);
+  getline(ifs, line);
   if(!ifs)
     return ifs; // failure, end of universe, sanity halted!
   const char *pt = line.c_str();

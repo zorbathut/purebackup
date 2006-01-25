@@ -1,2 +1,4 @@
-- Dealing with CD stuff
 - Samba/SSH support
+- Restore util
+
+- Dealing with CD stuff
