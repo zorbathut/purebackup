@@ -27,7 +27,7 @@
 
 using namespace std;
 
-enum { MTT_VIRTUAL, MTT_IMPLIED, MTT_MASKED, MTT_FILE, MTT_ITEM, MTT_END, MTT_UNINITTED };
+enum { MTT_VIRTUAL, MTT_IMPLIED, MTT_MASKED, MTT_FILE, MTT_SSH, MTT_ITEM, MTT_END, MTT_UNINITTED };
 
 class MountTree {
 public:
@@ -38,9 +38,13 @@ public:
   string file_source;
   bool file_scanned;
 
-  string item_fullpath;
-  long long item_size;  // -1 if unknown
-  long long item_timestamp; // -1 if unknown
+  string ssh_user;
+  string ssh_pass;
+  string ssh_host;
+  string ssh_source;
+  bool ssh_scanned;
+
+  Item item;
 
   bool checkSanity() const;
   

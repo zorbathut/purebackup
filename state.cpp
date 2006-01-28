@@ -30,18 +30,14 @@ void State::readFile(const string &fil) {
   kvData kvd;
   while(getkvDataInline(ifs, kvd)) {
     if(kvd.category == "file") {
-      Item item;
-      item.type = MTI_ORIGINAL;
-      item.size = atoll(kvd.consume("size").c_str());
-      item.metadata.timestamp = atoll(kvd.consume("timestamp").c_str());
-      item.setTotalChecksum(atochecksum(kvd.consume("checksum_sha1").c_str()));
       string itemname = kvd.consume("name");
       CHECK(!items.count(itemname));
-      items[itemname] = item;
+      items[itemname] = Item::MakeOriginal(atoll(kvd.consume("size").c_str()), atoll(kvd.consume("timestamp").c_str()), atochecksum(kvd.consume("checksum_sha1").c_str()));
     } else {
       CHECK(0);
     }
   }
+  CHECK(kvd.isDone());
 }
 
 const map<string, Item> &State::getItemDb() const {
@@ -62,8 +58,7 @@ void State::process(const Instruction &in) {
     vector<Item> srcs;
     for(int i = 0; i < in.rotate_paths.size(); i++) {
       CHECK(items.count(in.rotate_paths[i].first));
-      srcs.push_back(items[in.rotate_paths[i].first]);
-      srcs.back().metadata = in.rotate_paths[i].second;
+      srcs.push_back(Item::MakeOriginal(items[in.rotate_paths[i].first].size(), in.rotate_paths[i].second, items[in.rotate_paths[i].first].checksum()));
       //printf("%lld %s\n", srcs.back().metadata.timestamp, srcs.back().checksum().toString().c_str());
     }
     for(int i = 0; i < in.rotate_paths.size(); i++)
@@ -75,22 +70,17 @@ void State::process(const Instruction &in) {
     //dprintf("Copying from %s\n", in.copy_source.c_str());
     //dprintf("%d\n", items.count(in.copy_source));
     CHECK(items.count(in.copy_source));
-    items[in.copy_dest] = items[in.copy_source];
-    items[in.copy_dest].metadata = in.copy_dest_meta;
+    items[in.copy_dest] = Item::MakeOriginal(items[in.copy_source].size(), in.copy_dest_meta, items[in.copy_source].checksum());
   } else if(in.type == TYPE_APPEND) {
     CHECK(items.count(in.append_path));
-    items[in.append_path].size = in.append_size;
-    items[in.append_path].metadata = in.append_meta;
-    items[in.append_path].setTotalChecksum(in.append_checksum);
+    items[in.append_path] = Item::MakeOriginal(in.append_size, in.append_meta, in.append_checksum);
   } else if(in.type == TYPE_STORE) {
     if(items.count(in.store_path))
       items.erase(items.find(in.store_path));
-    items[in.store_path].size = in.store_size;
-    items[in.store_path].metadata = in.store_meta;
-    items[in.store_path].setTotalChecksum(in.store_source->checksumPart(in.store_size));
+    items[in.append_path] = Item::MakeOriginal(in.store_size, in.store_meta, in.store_source->checksumPart(in.store_size));
   } else if(in.type == TYPE_TOUCH) {
     CHECK(items.count(in.touch_path));
-    items[in.touch_path].metadata = in.touch_meta;
+    items[in.touch_path] = Item::MakeOriginal(items[in.touch_path].size(), in.touch_meta, items[in.touch_path].checksum());
   } else {
     CHECK(0);
   }
@@ -102,8 +92,8 @@ void State::writeOut(const string &fn) const {
     kvData kvd;
     kvd.category = "file";
     kvd.kv["name"] = itr->first;
-    kvd.kv["size"] = StringPrintf("%lld", itr->second.size);
-    kvd.kv["timestamp"] = StringPrintf("%lld", itr->second.metadata.timestamp);
+    kvd.kv["size"] = StringPrintf("%lld", itr->second.size());
+    kvd.kv["timestamp"] = StringPrintf("%lld", itr->second.metadata().timestamp);
     kvd.kv["checksum_sha1"] = itr->second.checksum().toString();
     putkvDataInline(ofs, kvd, "name");
   }

@@ -34,6 +34,9 @@ public:
   /* permissions and stuff */
 
   string toKvd() const;
+
+  Metadata() { };
+  Metadata(long long in_timestamp) : timestamp(in_timestamp) { };
 };
 
 inline bool operator==(const Metadata &lhs, const Metadata &rhs) {
@@ -61,27 +64,36 @@ private:
 
 class Item {
 public:
-  int type;
-  long long size;
-  Metadata metadata;
-
-  string local_path;
+  
+  long long size() const { return p_size; }
+  const Metadata &metadata() const { return p_metadata; }
 
   ItemShunt *open() const;
 
   Checksum checksum() const;
   Checksum checksumPart(int len) const;
 
-  void setTotalChecksum(const Checksum &chs);
+  bool exists() const { return type != MTI_NONEXISTENT; }
 
   string toString() const;
 
+  static Item MakeLocal(const string &full_path, long long size, const Metadata &meta);
+  static Item MakeOriginal(long long size, const Metadata &meta, const Checksum &checksum);
+  
+  Item();
+
 private:
   mutable vector<pair<int, Checksum> > css;
+
+  int type;
+  long long p_size;
+  Metadata p_metadata;
+
+  string local_path;
 };
 
 inline bool operator==(const Item &lhs, const Item &rhs) {
-  return lhs.size == rhs.size && lhs.metadata == rhs.metadata && lhs.checksum() == rhs.checksum();
+  return lhs.size() == rhs.size() && lhs.metadata() == rhs.metadata() && lhs.checksum() == rhs.checksum();
 }
 
 #endif

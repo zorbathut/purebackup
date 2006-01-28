@@ -42,7 +42,7 @@ MountTree *getMountpointLocation(const string &loc) {
     tpt++;
     CHECK(*tpt);
   
-    if(cpos->type == MTT_UNINITTED) {
+    if(cpos->type == MTT_UNINITTED || cpos->type == MTT_VIRTUAL) {
       if(!inRealTree) {
         cpos->type = MTT_VIRTUAL;
       } else {
@@ -74,6 +74,19 @@ void createMountpoint(const string &loc, const string &type, const string &sourc
     dpt->type = MTT_FILE;
     dpt->file_source = source;
     dpt->file_scanned = false;
+  } else if(type == "ssh") {
+    dpt->type = MTT_SSH;
+    vector<string> spa = tokenize(source, "@");
+    CHECK(spa.size() == 2);
+    vector<string> spaa = tokenize(spa[0], ":");
+    vector<string> spab = tokenize(spa[1], ":");
+    CHECK(spaa.size() == 2);
+    CHECK(spab.size() == 2);
+    dpt->ssh_user = spaa[0];
+    dpt->ssh_pass = spaa[1];
+    dpt->ssh_host = spab[0];
+    dpt->ssh_source = spab[1];
+    dpt->ssh_scanned = false;
   } else {
     CHECK(0);
   }
@@ -411,7 +424,7 @@ void ArchiveState::doInst(const Instruction &inst) {
     zfi.external_fa = 0;
     if(inst.type == TYPE_APPEND) {
       CHECK(!zipOpenNewFileInZip(archivefile, inst.append_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
-      Checksum rvx = writeToZip(inst.append_source, newstate->findItem(inst.append_path)->size, inst.append_size, archivefile);
+      Checksum rvx = writeToZip(inst.append_source, newstate->findItem(inst.append_path)->size(), inst.append_size, archivefile);
       CHECK(rvx == inst.append_checksum);
       CHECK(!zipCloseFileInZip(archivefile));
     } else {
@@ -490,7 +503,7 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
     fflush(stdout);
     long long nextitem;
     if(inst[i].type == TYPE_APPEND) {
-      nextitem = inst[i].append_size - newstate->findItem(inst[i].append_path)->size;
+      nextitem = inst[i].append_size - newstate->findItem(inst[i].append_path)->size();
     } else if(inst[i].type == TYPE_STORE) {
       nextitem = inst[i].store_size;
     } else {
@@ -503,7 +516,7 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
       dprintf("Doing nasty half-instruction, woooo\n");
       if(inst[i].type == TYPE_APPEND) {
         Instruction ninst = inst[i];
-        ninst.append_size = newstate->findItem(ninst.append_path)->size + (size - tused);
+        ninst.append_size = newstate->findItem(ninst.append_path)->size() + (size - tused);
         CHECK(ninst.append_size < inst[i].append_size);
         ninst.append_checksum = ninst.append_source->checksumPart(ninst.append_size);
         ars.doInst(ninst);
@@ -640,17 +653,17 @@ int main() {
   vector<Instruction> inst;
   
   for(map<string, Item>::iterator itr = realitems.begin(); itr != realitems.end(); itr++) {
-    CHECK(itr->second.size >= 0);
-    CHECK(itr->second.metadata.timestamp >= 0);
+    CHECK(itr->second.size() >= 0);
+    CHECK(itr->second.metadata().timestamp >= 0);
     ftc.insert(itr->first);
   }
   
   for(map<string, Item>::const_iterator itr = origstate.getItemDb().begin(); itr != origstate.getItemDb().end(); itr++) {
-    CHECK(itr->second.size >= 0);
-    CHECK(itr->second.metadata.timestamp >= 0);
+    CHECK(itr->second.size() >= 0);
+    CHECK(itr->second.metadata().timestamp >= 0);
     CHECK(citem.count(make_pair(false, itr->first)) == 0);
     citem[make_pair(false, itr->first)] = itr->second;
-    citemsizemap[itr->second.size].push_back(make_pair(false, itr->first));
+    citemsizemap[itr->second.size()].push_back(make_pair(false, itr->first));
     fi.creates.push_back(make_pair(false, itr->first));
     ftc.insert(itr->first);
   }
@@ -669,24 +682,24 @@ int main() {
       // First, we check to see if it's the same file as existed before
       if(!got && citem.count(make_pair(false, *itr))) {
         const Item &pite = citem.find(make_pair(false, *itr))->second;
-        if(ite.size == pite.size && ite.metadata == pite.metadata) {
+        if(ite.size() == pite.size() && ite.metadata() == pite.metadata()) {
           // It's identical!
           //printf("Preserve file %s\n", itr->c_str());
           fi.creates.push_back(make_pair(true, *itr));
           got = true;
-        } else if(ite.size == pite.size && ite.checksum() == pite.checksum()) {
+        } else if(ite.size() == pite.size() && ite.checksum() == pite.checksum()) {
           // It's touched!
-          CHECK(ite.metadata != pite.metadata);
+          CHECK(ite.metadata() != pite.metadata());
           //printf("Touching file %s\n", itr->c_str());
           Instruction ti;
           ti.type = TYPE_TOUCH;
           ti.creates.push_back(make_pair(true, *itr));
           ti.depends.push_back(make_pair(false, *itr)); // if this matters, something is hideously wrong
           ti.touch_path = *itr;
-          ti.touch_meta = ite.metadata;
+          ti.touch_meta = ite.metadata();
           inst.push_back(ti);
           got = true;
-        } else if(ite.size > pite.size && ite.checksumPart(pite.size) == pite.checksum()) {
+        } else if(ite.size() > pite.size() && ite.checksumPart(pite.size()) == pite.checksum()) {
           // It's appended!
           //printf("Appendination on %s, dude!\n", itr->c_str());
           Instruction ti;
@@ -695,8 +708,8 @@ int main() {
           ti.depends.push_back(make_pair(false, *itr));
           ti.removes.push_back(make_pair(false, *itr));
           ti.append_path = *itr;
-          ti.append_size = ite.size;
-          ti.append_meta = ite.metadata;
+          ti.append_size = ite.size();
+          ti.append_meta = ite.metadata();
           ti.append_checksum = ite.checksum();
           ti.append_source = &ite;
           inst.push_back(ti);
@@ -706,10 +719,10 @@ int main() {
       
       // Okay, now we see if it's been copied from somewhere
       if(!got) {
-        const vector<pair<bool, string> > &sli = citemsizemap[ite.size];
+        const vector<pair<bool, string> > &sli = citemsizemap[ite.size()];
         //printf("Trying %d originals\n", sli.size());
         for(int k = 0; k < sli.size(); k++) {
-          CHECK(ite.size == citem[sli[k]].size);
+          CHECK(ite.size() == citem[sli[k]].size());
           //printf("Comparing with %d:%s\n", sli[k].first, sli[k].second.c_str());
           //printf("%s vs %s\n", ite.checksum().toString().c_str(), citem[sli[k]].checksum().toString().c_str());
           if(ite.checksum() == citem[sli[k]].checksum()) {
@@ -722,7 +735,7 @@ int main() {
               ti.removes.push_back(make_pair(false, *itr));
             ti.copy_source = sli[k].second;
             ti.copy_dest = *itr;
-            ti.copy_dest_meta = ite.metadata;
+            ti.copy_dest_meta = ite.metadata();
             inst.push_back(ti);
             got = true;
             break;
@@ -739,8 +752,8 @@ int main() {
         if(citem.count(make_pair(false, *itr)))
           ti.removes.push_back(make_pair(false, *itr));
         ti.store_path = *itr;
-        ti.store_size = ite.size;
-        ti.store_meta = ite.metadata;
+        ti.store_size = ite.size();
+        ti.store_meta = ite.metadata();
         ti.store_source = &ite;
         inst.push_back(ti);
         got = true;
@@ -749,7 +762,7 @@ int main() {
       CHECK(got);
       
       citem[make_pair(true, *itr)] = ite;
-      citemsizemap[ite.size].push_back(make_pair(true, *itr));
+      citemsizemap[ite.size()].push_back(make_pair(true, *itr));
       
     } else {
       CHECK(citem.count(make_pair(false, *itr)));
@@ -780,7 +793,7 @@ int main() {
     for(int i = 0; i < inst.size(); i++) {
       archsize += usedperitem;
       if(inst[i].type == TYPE_APPEND) {
-        archsize += inst[i].append_size - newstate.findItem(inst[i].append_path)->size;
+        archsize += inst[i].append_size - newstate.findItem(inst[i].append_path)->size();
       } else if(inst[i].type == TYPE_STORE) {
         archsize += inst[i].store_size;
       }

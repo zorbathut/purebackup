@@ -39,7 +39,7 @@ bool MountTree::checkSanity() const {
       if(!itr->second.checkSanity())
         return false;
       if(type == MTT_VIRTUAL) {
-        CHECK(itr->second.type == MTT_VIRTUAL || itr->second.type == MTT_FILE);
+        CHECK(itr->second.type == MTT_VIRTUAL || itr->second.type == MTT_FILE || itr->second.type == MTT_SSH);
       } else if(type == MTT_FILE) {
         CHECK(itr->second.type == MTT_FILE || itr->second.type == MTT_ITEM || itr->second.type == MTT_MASKED || itr->second.type == MTT_IMPLIED);
       } else if(type == MTT_IMPLIED) {
@@ -59,9 +59,22 @@ bool MountTree::checkSanity() const {
   
   if(type == MTT_ITEM) {
     checked = true;
-    CHECK(item_fullpath.size());
+    CHECK(item.exists());
   } else {
-    CHECK(item_fullpath.size() == 0);
+    CHECK(!item.exists());
+  }
+
+  if(type == MTT_SSH) {
+    checked = true;
+    CHECK(ssh_user.size());
+    CHECK(ssh_pass.size());
+    CHECK(ssh_host.size());
+    CHECK(ssh_source.size());
+  } else {
+    CHECK(!ssh_user.size());
+    CHECK(!ssh_pass.size());
+    CHECK(!ssh_host.size());
+    CHECK(!ssh_source.size());
   }
   
   CHECK(checked);
@@ -71,7 +84,7 @@ bool MountTree::checkSanity() const {
 
 void MountTree::print(int indent) const {
   string spacing(indent, ' ');
-  if(type == MTT_VIRTUAL || type == MTT_FILE) {
+  if(type == MTT_VIRTUAL || type == MTT_FILE || type == MTT_SSH) {
     for(map<string, MountTree>::const_iterator itr = links.begin(); itr != links.end(); itr++) {
       printf("%s%s\n", spacing.c_str(), itr->first.c_str());
       itr->second.print(indent + 2);
@@ -112,9 +125,7 @@ void MountTree::scan() {
         } else {
           if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
             links[fils[i].itemname].type = MTT_ITEM;
-            links[fils[i].itemname].item_fullpath = fils[i].full_path;
-            links[fils[i].itemname].item_size = fils[i].size;
-            links[fils[i].itemname].item_timestamp = fils[i].timestamp;
+            links[fils[i].itemname].item = Item::MakeLocal(fils[i].full_path, fils[i].size, Metadata(fils[i].timestamp));
           } else if(links[fils[i].itemname].type == MTT_MASKED) {
           } else {
             CHECK(0);
@@ -133,13 +144,8 @@ void MountTree::dumpItems(map<string, Item> *items, string cpath) const {
       itr->second.dumpItems(items, cpath + "/" + itr->first);
     }
   } else if(type == MTT_ITEM) {
-    Item nit;
-    nit.type = MTI_LOCAL;
-    nit.size = item_size;
-    nit.metadata.timestamp = item_timestamp;
-    nit.local_path = item_fullpath;
     CHECK(!items->count(cpath));
-    (*items)[cpath] = nit;
+    (*items)[cpath] = item;
   } else if(type == MTT_MASKED) {
   } else {
     CHECK(0);
