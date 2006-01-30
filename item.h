@@ -26,7 +26,9 @@
 
 using namespace std;
 
-enum { MTI_ORIGINAL, MTI_LOCAL, MTI_NONEXISTENT, MTI_END };
+enum { MTI_ORIGINAL, MTI_LOCAL, MTI_SSH, MTI_NONEXISTENT, MTI_END };
+
+class kvData;
 
 class Metadata {
 public:
@@ -38,6 +40,8 @@ public:
   Metadata() { };
   Metadata(long long in_timestamp) : timestamp(in_timestamp) { };
 };
+
+Metadata metaParseFromKvd(kvData kvd);
 
 inline bool operator==(const Metadata &lhs, const Metadata &rhs) {
   return lhs.timestamp == rhs.timestamp;
@@ -78,6 +82,7 @@ public:
   string toString() const;
 
   static Item MakeLocal(const string &full_path, long long size, const Metadata &meta);
+  static Item MakeSsh(const string &user, const string &pass, const string &host, const string &full_path, long long size, const Metadata &meta);
   static Item MakeOriginal(long long size, const Metadata &meta, const Checksum &checksum);
   
   Item();
@@ -90,6 +95,11 @@ private:
   Metadata p_metadata;
 
   string local_path;
+
+  string ssh_user;
+  string ssh_pass;
+  string ssh_host;
+  string ssh_path;
 };
 
 inline bool operator==(const Item &lhs, const Item &rhs) {

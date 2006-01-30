@@ -26,7 +26,14 @@ string Metadata::toKvd() const {
   kvData kvd;
   kvd.category = "metadata";
   kvd.kv["timestamp"] = StringPrintf("%lld", timestamp);
-  return getkvDataInlineString(kvd);
+  return putkvDataInlineString(kvd);
+}
+
+Metadata metaParseFromKvd(kvData kvd) {
+  CHECK(kvd.category == "metadata");
+  Metadata mtd;
+  sscanf(kvd.consume("timestamp").c_str(), "%lld", &mtd.timestamp);
+  return mtd;
 }
 
 string Checksum::toString() const {
@@ -125,6 +132,18 @@ Item Item::MakeOriginal(long long size, const Metadata &meta, const Checksum &ch
   item.p_size = size;
   item.p_metadata = meta;  
   item.css.push_back(make_pair(size, checksum));
+  return item;
+}
+
+Item Item::MakeSsh(const string &user, const string &pass, const string &host, const string &full_path, long long size, const Metadata &meta) {
+  Item item;
+  item.type = MTI_SSH;
+  item.p_size = size;
+  item.p_metadata = meta;  
+  item.ssh_user = user;
+  item.ssh_pass = pass;
+  item.ssh_host = host;
+  item.ssh_path = full_path;
   return item;
 }
 

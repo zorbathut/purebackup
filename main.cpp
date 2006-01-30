@@ -22,12 +22,14 @@
 #include "state.h"
 
 #include "minizip/zip.h"
+#include "minizip/unzip.h"
 
 #include <string>
 #include <fstream>
 #include <set>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <openssl/sha.h>
 
 using namespace std;
@@ -407,12 +409,12 @@ void ArchiveState::doInst(const Instruction &inst) {
         kvData kvd;
         kvd.category = "append";
         kvd.kv["source"] = pfname;
-        fprintf(proc, "%s\n", getkvDataInlineString(kvd).c_str());
+        fprintf(proc, "%s\n", putkvDataInlineString(kvd).c_str());
       } else {
         kvData kvd;
         kvd.category = "store";
         kvd.kv["source"] = pfname;
-        fprintf(proc, "%s\n", getkvDataInlineString(kvd).c_str());
+        fprintf(proc, "%s\n", putkvDataInlineString(kvd).c_str());
       }
   
     }
@@ -559,7 +561,8 @@ pair<int, int> inferDiscInfo() {
   // And for a third thing, we basically, essentially, don't know anything
   // Why the hell do these tools suck so much?
   
-  const string drive = "/cygdrive/d";
+  //const string drive = "/cygdrive/d";
+  const string drive = "/cygdrive/c/werk/sea/purebackup/temp";
   const long long drivesize = 100*1024*1024;
   
   long long usedsize = getTotalSizeUsed(drive);
@@ -590,6 +593,7 @@ pair<int, int> inferDiscInfo() {
         CHECK(isdigit(dlo[i].itemname[j]));
       CHECK(dlo[i].directory);
       dirnames.push_back(atoi(dlo[i].itemname.c_str()));
+      continue;
     }
     
     CHECK(0);
@@ -603,273 +607,471 @@ pair<int, int> inferDiscInfo() {
   return make_pair(dirnames.back(), drivesize - usedsize);
 };
 
-int main() {
+void createDirectoryTree(const string &tree) {
+  if(mkdir(tree.c_str(), 0755)) {
+    createDirectoryTree(string(tree.c_str(), (const char *)strrchr(tree.c_str(), '/')));
+    CHECK(!mkdir(tree.c_str(), 0755));
+  }
+}
+
+FILE *openAndCreatePath(const string &path) {
+  printf("open %s\n", path.c_str());
+  FILE *fil = fopen(path.c_str(), "wb");
+  if(!fil) {
+    createDirectoryTree(string(path.c_str(), (const char *)strrchr(path.c_str(), '/')));
+    fil = fopen(path.c_str(), "wb");
+  }
+  CHECK(fil);
+  return fil;
+}
+
+void applyMetadata(const string &path, const Metadata &meta) {
+  timeval tv[2];
+  memset(tv, 0, sizeof(tv));
+  tv[0].tv_sec = meta.timestamp;
+  tv[1].tv_sec = meta.timestamp;
   
-  pair<int, int> inf = inferDiscInfo();
-  if(inf.second < 1048576) {
-    printf("New disc, fucker!\n");
+  CHECK(!utimes(path.c_str(), tv));
+}
+
+void copyFile(const string &src, const string &dst, const Metadata &meta) {
+  FILE *fsrc = fopen(src.c_str(), "rb");
+  FILE *fdst = openAndCreatePath(dst);
+  
+  CHECK(fsrc);
+  CHECK(fdst);
+  
+  while(1) {
+    char buf[65536];
+    int rv = fread(buf, 1, sizeof(buf), fsrc);
+    
+    if(!rv)
+      break;
+    
+    fwrite(buf, 1, rv, fdst);
+  };
+  
+  fclose(fsrc);
+  fclose(fdst);
+  
+  applyMetadata(dst, meta);
+}
+
+void restore(const string &src, const string &dst) {
+  ifstream fil(StringPrintf("%s/process", src.c_str()).c_str());
+  
+  kvData kvd;
+  while(getkvDataInline(fil, kvd)) {
+    if(kvd.category == "store") {
+      string start = kvd.consume("source");
+      
+      unzFile unzf = unzOpen((src + "/" + start).c_str());
+      CHECK(unzf);
+      
+      CHECK(unzGoToFirstFile(unzf) == UNZ_OK);
+      
+      do {
+        char filename[1024];
+        
+        CHECK(unzGetCurrentFileInfo(unzf, NULL, filename, sizeof(filename), NULL, 0, NULL, 0) == UNZ_OK);
+        
+        string realfile = dst + "/" + filename;
+        printf("Creatinating file %s\n", realfile.c_str());
+        
+        CHECK(unzOpenCurrentFile(unzf) == UNZ_OK);
+        
+        FILE *fil = openAndCreatePath(realfile.c_str());
+        do {
+          char buf[65536];
+          
+          int byter = unzReadCurrentFile(unzf, buf, sizeof(buf));
+          if(!byter)
+            break;
+          
+          fwrite(buf, 1, byter, fil);
+        } while(1);
+        
+        fclose(fil);
+        
+        unzCloseCurrentFile(unzf);
+          
+      } while(unzGoToNextFile(unzf) == UNZ_OK);
+      
+      unzClose(unzf);
+      
+    } else if(kvd.category == "touch") {
+      
+      string path = kvd.consume("path");
+      Metadata meta = metaParseFromKvd(getkvDataInlineString(kvd.consume("meta")));
+      
+      applyMetadata(dst + path, meta);
+      
+    } else if(kvd.category == "copy") {
+      
+      copyFile(dst + kvd.consume("source"), dst + kvd.consume("dest"), metaParseFromKvd(getkvDataInlineString(kvd.consume("dest_meta"))));
+
+    } else if(kvd.category == "delete") {
+      
+      unlink((dst + kvd.consume("path")).c_str());
+    
+    } else if(kvd.category == "rotate") {
+      
+      int ct = 0;
+      for(ct = 0; kvd.kv.count(StringPrintf("meta%02d", ct)); ct++);
+      
+      CHECK(ct >= 2);
+      
+      vector<pair<string, Metadata> > path;
+      for(int i = 0; i < ct; i++)
+        path.push_back(make_pair(kvd.consume(StringPrintf("src%02ddst%02d", (i + 1) % ct, i)), metaParseFromKvd(getkvDataInlineString(kvd.consume(StringPrintf("meta%02d", i))))));
+      
+      reverse(path.begin(), path.end());
+      
+      path.insert(path.begin(), make_pair("/tmp1230478cvhoiuw", Metadata())); // wheeeeeeee
+      path.push_back(make_pair("/tmp1230478cvhoiuw", Metadata()));
+      
+      for(int i = 0; i < path.size() - 1; i++)
+        copyFile(dst + path[i + 1].first, dst + path[i].first, path[i].second);
+      
+      unlink((dst + "/tmp1230478cvhoiuw").c_str());
+      
+    } else if(kvd.category == "append") {
+      string start = kvd.consume("source");
+      
+      unzFile unzf = unzOpen((src + "/" + start).c_str());
+      CHECK(unzf);
+      
+      CHECK(unzGoToFirstFile(unzf) == UNZ_OK);
+      
+      do {
+        char filename[1024];
+        
+        CHECK(unzGetCurrentFileInfo(unzf, NULL, filename, sizeof(filename), NULL, 0, NULL, 0) == UNZ_OK);
+        
+        string realfile = dst + "/" + filename;
+        printf("Creatinating file %s\n", realfile.c_str());
+        
+        CHECK(unzOpenCurrentFile(unzf) == UNZ_OK);
+        
+        FILE *fil = fopen(realfile.c_str(), "a");
+        do {
+          char buf[65536];
+          
+          int byter = unzReadCurrentFile(unzf, buf, sizeof(buf));
+          if(!byter)
+            break;
+          
+          fwrite(buf, 1, byter, fil);
+        } while(1);
+        fclose(fil);
+        
+        unzCloseCurrentFile(unzf);
+          
+      } while(unzGoToNextFile(unzf) == UNZ_OK);
+      
+      unzClose(unzf);
+      
+    } else {
+      CHECK(0);
+    }
+    
+    CHECK(kvd.isDone());
+    
+  }
+}
+
+int main(int argc, char **argv) {
+  
+  if(argc != 2) {
+    printf("purebackup backup or purebackup restore - and seriously, you really want to email zorba-purebackup@pavlovian.net if you want to do anything serious with this program.");
     return 0;
   }
   
-  printf("Reading config\n");
-  readConfig("purebackup.conf");
+  string command = argv[1];
+  if(command == "backup") {
   
-  printf("Scanning items\n");
-  scanPaths();
-  
-  printf("Dumping items\n");
-  map<string, Item> realitems;
-  getRoot()->dumpItems(&realitems, "");
-  dprintf("%d items found\n", realitems.size());
-  
-  int curstateid;
-  string curstate;
-  string nextstate;
-  
-  {
-    FILE *vidi = fopen("states/current", "r");
-    curstateid = 0;
-    if(vidi) {
-      fscanf(vidi, "%d", &curstateid);
-      fclose(vidi);
-    } else {
-      system("touch states/00000000");
+    pair<int, int> inf = inferDiscInfo();
+    if(inf.second < 1048576) {
+      printf("New disc, fucker!\n");
+      return 0;
     }
     
-    curstate = StringPrintf("states/%08d", curstateid);
-    nextstate = StringPrintf("states/%08d", curstateid + 1);
-  }
-  
-  State origstate;
-  origstate.readFile(curstate);
-  
-  map<pair<bool, string>, Item> citem;
-  map<long long, vector<pair<bool, string> > > citemsizemap;
-  set<string> ftc;
-  
-  Instruction fi;
-  fi.type = TYPE_CREATE;
-  
-  vector<Instruction> inst;
-  
-  for(map<string, Item>::iterator itr = realitems.begin(); itr != realitems.end(); itr++) {
-    CHECK(itr->second.size() >= 0);
-    CHECK(itr->second.metadata().timestamp >= 0);
-    ftc.insert(itr->first);
-  }
-  
-  for(map<string, Item>::const_iterator itr = origstate.getItemDb().begin(); itr != origstate.getItemDb().end(); itr++) {
-    CHECK(itr->second.size() >= 0);
-    CHECK(itr->second.metadata().timestamp >= 0);
-    CHECK(citem.count(make_pair(false, itr->first)) == 0);
-    citem[make_pair(false, itr->first)] = itr->second;
-    citemsizemap[itr->second.size()].push_back(make_pair(false, itr->first));
-    fi.creates.push_back(make_pair(false, itr->first));
-    ftc.insert(itr->first);
-  }
-  
-  int itpos = 0;
-  // FTC is the union of the files in realitems and origstate
-  // citem is the items that we can look at
-  // citemsizemap is the same, only organized by size
-  for(set<string>::iterator itr = ftc.begin(); itr != ftc.end(); itr++) {
-    printf("%d/%d files examined\r", itpos++, ftc.size());
-    fflush(stdout);
-    if(realitems.count(*itr)) {
-      const Item &ite = realitems.find(*itr)->second;
-      bool got = false;
-      
-      // First, we check to see if it's the same file as existed before
-      if(!got && citem.count(make_pair(false, *itr))) {
-        const Item &pite = citem.find(make_pair(false, *itr))->second;
-        if(ite.size() == pite.size() && ite.metadata() == pite.metadata()) {
-          // It's identical!
-          //printf("Preserve file %s\n", itr->c_str());
-          fi.creates.push_back(make_pair(true, *itr));
-          got = true;
-        } else if(ite.size() == pite.size() && ite.checksum() == pite.checksum()) {
-          // It's touched!
-          CHECK(ite.metadata() != pite.metadata());
-          //printf("Touching file %s\n", itr->c_str());
-          Instruction ti;
-          ti.type = TYPE_TOUCH;
-          ti.creates.push_back(make_pair(true, *itr));
-          ti.depends.push_back(make_pair(false, *itr)); // if this matters, something is hideously wrong
-          ti.touch_path = *itr;
-          ti.touch_meta = ite.metadata();
-          inst.push_back(ti);
-          got = true;
-        } else if(ite.size() > pite.size() && ite.checksumPart(pite.size()) == pite.checksum()) {
-          // It's appended!
-          //printf("Appendination on %s, dude!\n", itr->c_str());
-          Instruction ti;
-          ti.type = TYPE_APPEND;
-          ti.creates.push_back(make_pair(true, *itr));
-          ti.depends.push_back(make_pair(false, *itr));
-          ti.removes.push_back(make_pair(false, *itr));
-          ti.append_path = *itr;
-          ti.append_size = ite.size();
-          ti.append_meta = ite.metadata();
-          ti.append_checksum = ite.checksum();
-          ti.append_source = &ite;
-          inst.push_back(ti);
-          got = true;
-        }
+    printf("Reading config\n");
+    readConfig("purebackup.conf");
+    
+    printf("Scanning items\n");
+    scanPaths();
+    
+    printf("Dumping items\n");
+    map<string, Item> realitems;
+    getRoot()->dumpItems(&realitems, "");
+    dprintf("%d items found\n", realitems.size());
+    
+    int curstateid;
+    string curstate;
+    string nextstate;
+    
+    {
+      FILE *vidi = fopen("states/current", "r");
+      curstateid = 0;
+      if(vidi) {
+        fscanf(vidi, "%d", &curstateid);
+        fclose(vidi);
+      } else {
+        system("touch states/00000000");
       }
       
-      // Okay, now we see if it's been copied from somewhere
-      if(!got) {
-        const vector<pair<bool, string> > &sli = citemsizemap[ite.size()];
-        //printf("Trying %d originals\n", sli.size());
-        for(int k = 0; k < sli.size(); k++) {
-          CHECK(ite.size() == citem[sli[k]].size());
-          //printf("Comparing with %d:%s\n", sli[k].first, sli[k].second.c_str());
-          //printf("%s vs %s\n", ite.checksum().toString().c_str(), citem[sli[k]].checksum().toString().c_str());
-          if(ite.checksum() == citem[sli[k]].checksum()) {
-            //printf("Holy crapcock! Copying %s from %s:%d! MADNESS\n", itr->c_str(), sli[k].second.c_str(), sli[k].first);
+      curstate = StringPrintf("states/%08d", curstateid);
+      nextstate = StringPrintf("states/%08d", curstateid + 1);
+    }
+    
+    State origstate;
+    origstate.readFile(curstate);
+    
+    map<pair<bool, string>, Item> citem;
+    map<long long, vector<pair<bool, string> > > citemsizemap;
+    set<string> ftc;
+    
+    Instruction fi;
+    fi.type = TYPE_CREATE;
+    
+    vector<Instruction> inst;
+    
+    for(map<string, Item>::iterator itr = realitems.begin(); itr != realitems.end(); itr++) {
+      CHECK(itr->second.size() >= 0);
+      CHECK(itr->second.metadata().timestamp >= 0);
+      ftc.insert(itr->first);
+    }
+    
+    for(map<string, Item>::const_iterator itr = origstate.getItemDb().begin(); itr != origstate.getItemDb().end(); itr++) {
+      CHECK(itr->second.size() >= 0);
+      CHECK(itr->second.metadata().timestamp >= 0);
+      CHECK(citem.count(make_pair(false, itr->first)) == 0);
+      citem[make_pair(false, itr->first)] = itr->second;
+      citemsizemap[itr->second.size()].push_back(make_pair(false, itr->first));
+      fi.creates.push_back(make_pair(false, itr->first));
+      ftc.insert(itr->first);
+    }
+    
+    int itpos = 0;
+    // FTC is the union of the files in realitems and origstate
+    // citem is the items that we can look at
+    // citemsizemap is the same, only organized by size
+    for(set<string>::iterator itr = ftc.begin(); itr != ftc.end(); itr++) {
+      printf("%d/%d files examined\r", itpos++, ftc.size());
+      fflush(stdout);
+      if(realitems.count(*itr)) {
+        const Item &ite = realitems.find(*itr)->second;
+        bool got = false;
+        
+        // First, we check to see if it's the same file as existed before
+        if(!got && citem.count(make_pair(false, *itr))) {
+          const Item &pite = citem.find(make_pair(false, *itr))->second;
+          if(ite.size() == pite.size() && ite.metadata() == pite.metadata()) {
+            // It's identical!
+            //printf("Preserve file %s\n", itr->c_str());
+            fi.creates.push_back(make_pair(true, *itr));
+            got = true;
+          } else if(ite.size() == pite.size() && ite.checksum() == pite.checksum()) {
+            // It's touched!
+            CHECK(ite.metadata() != pite.metadata());
+            //printf("Touching file %s\n", itr->c_str());
             Instruction ti;
-            ti.type = TYPE_COPY;
+            ti.type = TYPE_TOUCH;
             ti.creates.push_back(make_pair(true, *itr));
-            ti.depends.push_back(sli[k]);
-            if(citem.count(make_pair(false, *itr)))
-              ti.removes.push_back(make_pair(false, *itr));
-            ti.copy_source = sli[k].second;
-            ti.copy_dest = *itr;
-            ti.copy_dest_meta = ite.metadata();
+            ti.depends.push_back(make_pair(false, *itr)); // if this matters, something is hideously wrong
+            ti.touch_path = *itr;
+            ti.touch_meta = ite.metadata();
             inst.push_back(ti);
             got = true;
-            break;
+          } else if(ite.size() > pite.size() && ite.checksumPart(pite.size()) == pite.checksum()) {
+            // It's appended!
+            //printf("Appendination on %s, dude!\n", itr->c_str());
+            Instruction ti;
+            ti.type = TYPE_APPEND;
+            ti.creates.push_back(make_pair(true, *itr));
+            ti.depends.push_back(make_pair(false, *itr));
+            ti.removes.push_back(make_pair(false, *itr));
+            ti.append_path = *itr;
+            ti.append_size = ite.size();
+            ti.append_meta = ite.metadata();
+            ti.append_checksum = ite.checksum();
+            ti.append_source = &ite;
+            inst.push_back(ti);
+            got = true;
           }
         }
-      }
-      
-      // And now we give up and just store it
-      if(!got) {
-        //printf("Storing %s from GALACTIC ETHER\n", itr->c_str());
+        
+        // Okay, now we see if it's been copied from somewhere
+        if(!got) {
+          const vector<pair<bool, string> > &sli = citemsizemap[ite.size()];
+          //printf("Trying %d originals\n", sli.size());
+          for(int k = 0; k < sli.size(); k++) {
+            CHECK(ite.size() == citem[sli[k]].size());
+            //printf("Comparing with %d:%s\n", sli[k].first, sli[k].second.c_str());
+            //printf("%s vs %s\n", ite.checksum().toString().c_str(), citem[sli[k]].checksum().toString().c_str());
+            if(ite.checksum() == citem[sli[k]].checksum()) {
+              //printf("Holy crapcock! Copying %s from %s:%d! MADNESS\n", itr->c_str(), sli[k].second.c_str(), sli[k].first);
+              Instruction ti;
+              ti.type = TYPE_COPY;
+              ti.creates.push_back(make_pair(true, *itr));
+              ti.depends.push_back(sli[k]);
+              if(citem.count(make_pair(false, *itr)))
+                ti.removes.push_back(make_pair(false, *itr));
+              ti.copy_source = sli[k].second;
+              ti.copy_dest = *itr;
+              ti.copy_dest_meta = ite.metadata();
+              inst.push_back(ti);
+              got = true;
+              break;
+            }
+          }
+        }
+        
+        // And now we give up and just store it
+        if(!got) {
+          //printf("Storing %s from GALACTIC ETHER\n", itr->c_str());
+          Instruction ti;
+          ti.type = TYPE_STORE;
+          ti.creates.push_back(make_pair(true, *itr));
+          if(citem.count(make_pair(false, *itr)))
+            ti.removes.push_back(make_pair(false, *itr));
+          ti.store_path = *itr;
+          ti.store_size = ite.size();
+          ti.store_meta = ite.metadata();
+          ti.store_source = &ite;
+          inst.push_back(ti);
+          got = true;
+        }
+         
+        CHECK(got);
+        
+        citem[make_pair(true, *itr)] = ite;
+        citemsizemap[ite.size()].push_back(make_pair(true, *itr));
+        
+      } else {
+        CHECK(citem.count(make_pair(false, *itr)));
+        //printf("Delete file %s\n", itr->c_str());
         Instruction ti;
-        ti.type = TYPE_STORE;
-        ti.creates.push_back(make_pair(true, *itr));
-        if(citem.count(make_pair(false, *itr)))
-          ti.removes.push_back(make_pair(false, *itr));
-        ti.store_path = *itr;
-        ti.store_size = ite.size();
-        ti.store_meta = ite.metadata();
-        ti.store_source = &ite;
+        ti.type = TYPE_DELETE;
+        ti.delete_path = *itr;
+        ti.removes.push_back(make_pair(false, *itr));
         inst.push_back(ti);
-        got = true;
       }
-       
-      CHECK(got);
+    }
+    
+    inst.push_back(fi);
+    
+    inst = sortInst(inst);
+    
+    State newstate = origstate;
+    
+    printf("Genarch\n");
+    
+    if(inst.size() == 0) {
+      printf("No changes!\n");
+      return 0;
+    }
+    
+    {
+      long long archsize = 0;
+      for(int i = 0; i < inst.size(); i++) {
+        archsize += usedperitem;
+        if(inst[i].type == TYPE_APPEND) {
+          archsize += inst[i].append_size - newstate.findItem(inst[i].append_path)->size();
+        } else if(inst[i].type == TYPE_STORE) {
+          archsize += inst[i].store_size;
+        }
+      }
+      printf("Total of %lld bytes left! (%lldmb)\n", archsize, archsize >> 20);
+    }
+    
+    //system("rm -rf temp");  // this is obviously dangerous, dur
+    system("mkdir temp");
+    
+    printf("Generating archive of at most %d bytes\n", inf.second);
+    
+    bool spaceleft;
+    
+    if(inf.first == -1) {
+      // We need to copy our original state to the root, then create our first patch
+      system(StringPrintf("cp %s %s", curstate.c_str(), "temp/manifest").c_str()); // note: this is buggy and probably a security hole
+      string destpath = StringPrintf("temp/%08d", curstateid + 1);
+      system(StringPrintf("mkdir %s", destpath.c_str()).c_str());
       
-      citem[make_pair(true, *itr)] = ite;
-      citemsizemap[ite.size()].push_back(make_pair(true, *itr));
-      
+      generateArchive(inst, &newstate, curstate, inf.second, destpath, &spaceleft);
     } else {
-      CHECK(citem.count(make_pair(false, *itr)));
-      //printf("Delete file %s\n", itr->c_str());
-      Instruction ti;
-      ti.type = TYPE_DELETE;
-      ti.delete_path = *itr;
-      ti.removes.push_back(make_pair(false, *itr));
-      inst.push_back(ti);
+      // We don't. (Duh.)
+      CHECK(inf.first == curstateid);
+      string destpath = StringPrintf("temp/%08d", curstateid + 1);
+      system(StringPrintf("mkdir %s", destpath.c_str()).c_str());
+      
+      generateArchive(inst, &newstate, curstate, inf.second, destpath, &spaceleft);
     }
-  }
-  
-  inst.push_back(fi);
-  
-  inst = sortInst(inst);
-  
-  State newstate = origstate;
-  
-  printf("Genarch\n");
-  
-  if(inst.size() == 0) {
-    printf("No changes!\n");
-    return 0;
-  }
-  
-  {
-    long long archsize = 0;
-    for(int i = 0; i < inst.size(); i++) {
-      archsize += usedperitem;
-      if(inst[i].type == TYPE_APPEND) {
-        archsize += inst[i].append_size - newstate.findItem(inst[i].append_path)->size();
-      } else if(inst[i].type == TYPE_STORE) {
-        archsize += inst[i].store_size;
-      }
-    }
-    printf("Total of %lld bytes left! (%lldmb)\n", archsize, archsize >> 20);
-  }
-  
-  system("rm -rf temp");  // this is obviously dangerous, dur
-  system("mkdir temp");
-  
-  printf("Generating archive of at most %d bytes\n", inf.second);
-  
-  bool spaceleft;
-  
-  if(inf.first == -1) {
-    // We need to copy our original state to the root, then create our first patch
-    system(StringPrintf("cp %s %s", curstate.c_str(), "temp/manifest").c_str()); // note: this is buggy and probably a security hole
-    string destpath = StringPrintf("temp/%08d", curstateid + 1);
-    system(StringPrintf("mkdir %s", destpath.c_str()).c_str());
     
-    generateArchive(inst, &newstate, curstate, inf.second, destpath, &spaceleft);
-  } else {
-    // We don't. (Duh.)
-    CHECK(inf.first == curstateid);
-    string destpath = StringPrintf("temp/%08d", curstateid + 1);
-    system(StringPrintf("mkdir %s", destpath.c_str()).c_str());
-    
-    generateArchive(inst, &newstate, curstate, inf.second, destpath, &spaceleft);
-  }
-  
-  printf("Done genarch\n");
-
-/*
-  {
-    const map<string, Item> &lhs = newstate.getItemDb();
-    const map<string, Item> &rhs = realitems;
-    CHECK(lhs.size() == rhs.size());
-    for(map<string, Item>::const_iterator lhsi = lhs.begin(), rhsi = rhs.begin(); lhsi != lhs.end(); lhsi++, rhsi++) {
-      printf("Comparing %s and %s\n", lhsi->first.c_str(), rhsi->first.c_str());
-      printf("%s\n", lhsi->second.toString().c_str());
-      printf("%s\n", rhsi->second.toString().c_str());
-      CHECK(lhsi->first == rhsi->first);
-      CHECK(lhsi->second == rhsi->second);
-    }
-  }
-*/
+    printf("Done genarch\n");
   
   /*
-  if(inf.first == -1) {
-    // We're not continuing a multisession CD
-    system("mkisofs -J -r -o image.iso temp");
+    {
+      const map<string, Item> &lhs = newstate.getItemDb();
+      const map<string, Item> &rhs = realitems;
+      CHECK(lhs.size() == rhs.size());
+      for(map<string, Item>::const_iterator lhsi = lhs.begin(), rhsi = rhs.begin(); lhsi != lhs.end(); lhsi++, rhsi++) {
+        printf("Comparing %s and %s\n", lhsi->first.c_str(), rhsi->first.c_str());
+        printf("%s\n", lhsi->second.toString().c_str());
+        printf("%s\n", rhsi->second.toString().c_str());
+        CHECK(lhsi->first == rhsi->first);
+        CHECK(lhsi->second == rhsi->second);
+      }
+    }
+  */
+    
+    /*
+    if(inf.first == -1) {
+      // We're not continuing a multisession CD
+      system("mkisofs -J -r -o image.iso temp");
+    } else {
+      // We are continuing a multisession CD
+      system("mkisofs -J -r -C `dvdrecord dev=1,0,0 -msinfo`-o image.iso temp");
+    }
+    
+    spaceleft = true;
+    if(spaceleft) {
+      // We're leaving multisession space open
+      system("dvdrecord dev=1,0,0 -v -eject speed=40 fs=16m -multi image.iso");
+    } else {
+      // We're closing the CD
+      system("dvdrecord dev=1,0,0 -v -eject speed=40 fs=16m image.iso");
+    }*/
+    
+    if(spaceleft) {
+      printf("Burn it now, and leave multisession open!\n");
+    } else {
+      printf("Burn it now, and close the CD!\n");
+    }
+    
+    
+    newstate.writeOut(nextstate);
+    
+    FILE *curv = fopen("states/current", "w");
+    CHECK(curv);
+    fprintf(curv, "%d\n", curstateid + 1);
+    fclose(curv);
+    
+  } else if(command == "restore") {
+    
+    string source = "/cygdrive/c/werk/sea/purebackup/temp";
+    string dest = "/cygdrive/c/werk/sea/purebackup/restore";
+    
+    system(StringPrintf("rm -rf %s", dest.c_str()).c_str());
+    
+    for(int i = 1; i <= 5; i++) {
+      printf("Restoring %d\n", i);
+      restore(StringPrintf("%s/%08d", source.c_str(), i), dest);
+    }
+    
   } else {
-    // We are continuing a multisession CD
-    system("mkisofs -J -r -C `dvdrecord dev=1,0,0 -msinfo`-o image.iso temp");
+    printf("just \"purebackup\" for help\n");
   }
-  
-  spaceleft = true;
-  if(spaceleft) {
-    // We're leaving multisession space open
-    system("dvdrecord dev=1,0,0 -v -eject speed=40 fs=16m -multi image.iso");
-  } else {
-    // We're closing the CD
-    system("dvdrecord dev=1,0,0 -v -eject speed=40 fs=16m image.iso");
-  }*/
-  
-  if(spaceleft) {
-    printf("Burn it now, and leave multisession open!\n");
-  } else {
-    printf("Burn it now, and close the CD!\n");
-  }
-  
-  newstate.writeOut(nextstate);
-  
-  FILE *curv = fopen("states/current", "w");
-  CHECK(curv);
-  fprintf(curv, "%d\n", curstateid + 1);
-  fclose(curv);
 
 }

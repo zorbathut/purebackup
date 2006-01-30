@@ -22,8 +22,6 @@
 #include <vector>
 #include <set>
 
-#include <silcincludes.h>
-
 using namespace std;
 
 bool MountTree::checkSanity() const {
@@ -108,31 +106,61 @@ void MountTree::scan() {
       itr->second.scan();
     }
   } else if(type == MTT_FILE) {
-    if(!file_scanned) {
-      file_scanned = true;
-      vector<DirListOut> fils = getDirList(file_source);
-      for(int i = 0; i < fils.size(); i++) {
-        if(fils[i].directory) {
-          if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
-            links[fils[i].itemname].type = MTT_FILE;
-            links[fils[i].itemname].file_source = fils[i].full_path;
-            links[fils[i].itemname].file_scanned = false;
-            links[fils[i].itemname].scan();
-          } else if(links[fils[i].itemname].type == MTT_MASKED) {
-          } else {
-            CHECK(0);
-          }
+    CHECK(!file_scanned);
+  
+    file_scanned = true;
+    vector<DirListOut> fils = getDirList(file_source);
+    for(int i = 0; i < fils.size(); i++) {
+      if(fils[i].directory) {
+        if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
+          links[fils[i].itemname].type = MTT_FILE;
+          links[fils[i].itemname].file_source = fils[i].full_path;
+          links[fils[i].itemname].file_scanned = false;
+          links[fils[i].itemname].scan();
+        } else if(links[fils[i].itemname].type == MTT_MASKED) {
         } else {
-          if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
-            links[fils[i].itemname].type = MTT_ITEM;
-            links[fils[i].itemname].item = Item::MakeLocal(fils[i].full_path, fils[i].size, Metadata(fils[i].timestamp));
-          } else if(links[fils[i].itemname].type == MTT_MASKED) {
-          } else {
-            CHECK(0);
-          }
+          CHECK(0);
+        }
+      } else {
+        if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
+          links[fils[i].itemname].type = MTT_ITEM;
+          links[fils[i].itemname].item = Item::MakeLocal(fils[i].full_path, fils[i].size, Metadata(fils[i].timestamp));
+        } else if(links[fils[i].itemname].type == MTT_MASKED) {
+        } else {
+          CHECK(0);
         }
       }
     }
+  } else if(type == MTT_SSH) {
+    CHECK(!ssh_scanned);
+    
+    ssh_scanned = true;
+    vector<DirListOut> fils = getSSHDirList(ssh_user, ssh_pass, ssh_host, ssh_source);
+    for(int i = 0; i < fils.size(); i++) {
+      if(fils[i].directory) {
+        if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
+          links[fils[i].itemname].type = MTT_SSH;
+          links[fils[i].itemname].ssh_user = ssh_user;
+          links[fils[i].itemname].ssh_pass = ssh_pass;
+          links[fils[i].itemname].ssh_host = ssh_host;
+          links[fils[i].itemname].ssh_source = fils[i].full_path;
+          links[fils[i].itemname].ssh_scanned = false;
+          links[fils[i].itemname].scan();
+        } else if(links[fils[i].itemname].type == MTT_MASKED) {
+        } else {
+          CHECK(0);
+        }
+      } else {
+        if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
+          links[fils[i].itemname].type = MTT_ITEM;
+          links[fils[i].itemname].item = Item::MakeSsh(ssh_user, ssh_pass, ssh_host, fils[i].full_path, fils[i].size, Metadata(fils[i].timestamp));
+        } else if(links[fils[i].itemname].type == MTT_MASKED) {
+        } else {
+          CHECK(0);
+        }
+      }
+    }
+    
   } else {
     CHECK(0);
   }

@@ -77,7 +77,7 @@ void State::process(const Instruction &in) {
   } else if(in.type == TYPE_STORE) {
     if(items.count(in.store_path))
       items.erase(items.find(in.store_path));
-    items[in.append_path] = Item::MakeOriginal(in.store_size, in.store_meta, in.store_source->checksumPart(in.store_size));
+    items[in.store_path] = Item::MakeOriginal(in.store_size, in.store_meta, in.store_source->checksumPart(in.store_size));
   } else if(in.type == TYPE_TOUCH) {
     CHECK(items.count(in.touch_path));
     items[in.touch_path] = Item::MakeOriginal(items[in.touch_path].size(), in.touch_meta, items[in.touch_path].checksum());
@@ -151,5 +151,5 @@ string Instruction::processString() const {
   } else {
     CHECK(0);
   }
-  return getkvDataInlineString(kvd);
+  return putkvDataInlineString(kvd);
 }

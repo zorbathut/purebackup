@@ -1,4 +1,5 @@
-- Samba/SSH support
-- Restore util
+- Add state tracking
 
+- Samba/SSH support
+- Make rotate sane
 - Dealing with CD stuff

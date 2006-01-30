@@ -121,7 +121,7 @@ istream &getkvData(istream &ifs, kvData &out) {
 }
 
 void putkvDataInline(ostream &ofs, const kvData &in, const string &mostimportant) {
-  ofs << getkvDataInlineString(in, mostimportant) << '\n';
+  ofs << putkvDataInlineString(in, mostimportant) << '\n';
 }
 
 // Data format:
@@ -162,7 +162,7 @@ void appendEscapedStr(string *stt, const string &esc) {
   (*stt) += '"';
 }
 
-string getkvDataInlineString(const kvData &in, const string &mostimportant) {
+string putkvDataInlineString(const kvData &in, const string &mostimportant) {
   string stt;
   CHECK(isAlphanumeric(in.category));
   stt += in.category + ":";
@@ -262,6 +262,12 @@ istream &getkvDataInline(istream &ifs, kvData &out) {
   getline(ifs, line);
   if(!ifs)
     return ifs; // failure, end of universe, sanity halted!
+  out = getkvDataInlineString(line);
+  return ifs; // this may be failure, if we're at the end
+}
+
+kvData getkvDataInlineString(const string &line) {
+  kvData out;
   const char *pt = line.c_str();
   out.category = parseWord(&pt, ':');
   while(*pt) {
@@ -272,5 +278,5 @@ istream &getkvDataInline(istream &ifs, kvData &out) {
     CHECK(!out.kv.count(key));
     out.kv[key] = value;
   }
-  return ifs; // this may be failure, if we're at the end
+  return out;
 }

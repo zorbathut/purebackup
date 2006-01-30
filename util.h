@@ -48,5 +48,6 @@ public:
 };
 
 vector<DirListOut> getDirList(const string &path);
+vector<DirListOut> getSSHDirList(const string &user, const string &pass, const string &host, const string &path);
 
 #endif

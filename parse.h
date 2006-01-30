@@ -47,7 +47,8 @@ istream &getLineStripped(istream &ifs, string &out);
 istream &getkvData(istream &ifs, kvData &out);
 
 void putkvDataInline(ostream &ofs, const kvData &in, const string &mostimportant = "");
-string getkvDataInlineString(const kvData &ifs, const string &mostimportant = "");
+string putkvDataInlineString(const kvData &ifs, const string &mostimportant = "");
 istream &getkvDataInline(istream &ifs, kvData &out);
+kvData getkvDataInlineString(const string &dat);
 
 #endif
