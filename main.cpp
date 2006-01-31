@@ -358,7 +358,7 @@ long long filesize(const string &fsz) {
 class ArchiveState {
 public:
   
-  void doInst(const Instruction &inst);
+  void doInst(const Instruction &inst, int tversion);
 
   long long getCSize() const;
 
@@ -383,7 +383,7 @@ private:
 
 const int usedperitem = 500;
 
-void ArchiveState::doInst(const Instruction &inst) {
+void ArchiveState::doInst(const Instruction &inst, int tversion) {
   
   used += usedperitem;
   
@@ -446,7 +446,7 @@ void ArchiveState::doInst(const Instruction &inst) {
     fprintf(proc, "%s\n", inst.processString().c_str());
   }
   
-  newstate->process(inst);
+  newstate->process(inst, tversion);
 
 }
 
@@ -493,7 +493,7 @@ ArchiveState::~ArchiveState() {
 // * Some number of archive files
 // * Some number of other compressed datafiles, possibly
 // * State diff
-void generateArchive(const vector<Instruction> &inst, State *newstate, const string &origstate, long long size, const string &destpath, bool *spaceleft) {
+void generateArchive(const vector<Instruction> &inst, State *newstate, const string &origstate, long long size, const string &destpath, bool *spaceleft, int tversion) {
   
   dprintf("Starting archive - %d instructions\n", inst.size());
   
@@ -521,20 +521,20 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
         ninst.append_size = newstate->findItem(ninst.append_path)->size() + (size - tused);
         CHECK(ninst.append_size < inst[i].append_size);
         ninst.append_checksum = ninst.append_source->checksumPart(ninst.append_size);
-        ars.doInst(ninst);
+        ars.doInst(ninst, tversion);
       } else {
         CHECK(inst[i].type == TYPE_STORE);
         Instruction ninst = inst[i];
         ninst.store_size = size - tused;
         CHECK(ninst.store_size < inst[i].store_size);
-        ars.doInst(ninst);
+        ars.doInst(ninst, tversion);
       }
       dprintf("Done nasty half-instruction\n");
       break;
     } else if(tused + nextitem > size) {
       break;
     } else {
-      ars.doInst(inst[i]);
+      ars.doInst(inst[i], tversion);
     }
   }
   
@@ -999,14 +999,14 @@ int main(int argc, char **argv) {
       string destpath = StringPrintf("temp/%08d", curstateid + 1);
       system(StringPrintf("mkdir %s", destpath.c_str()).c_str());
       
-      generateArchive(inst, &newstate, curstate, inf.second, destpath, &spaceleft);
+      generateArchive(inst, &newstate, curstate, inf.second, destpath, &spaceleft, curstateid + 1);
     } else {
       // We don't. (Duh.)
       CHECK(inf.first == curstateid);
       string destpath = StringPrintf("temp/%08d", curstateid + 1);
       system(StringPrintf("mkdir %s", destpath.c_str()).c_str());
       
-      generateArchive(inst, &newstate, curstate, inf.second, destpath, &spaceleft);
+      generateArchive(inst, &newstate, curstate, inf.second, destpath, &spaceleft, curstateid + 1);
     }
     
     printf("Done genarch\n");

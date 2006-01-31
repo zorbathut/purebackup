@@ -113,6 +113,13 @@ Checksum Item::checksumPart(int len) const {
   CHECK(0);
 }
 
+void Item::addVersion(int x) {
+  needed_versions.insert(x);
+}
+const set<int> &Item::getVersions() const {
+  return needed_versions;
+}
+
 string Item::toString() const {
   return StringPrintf("%lld %lld %s", size(), metadata().timestamp, checksum().toString().c_str());
 }
@@ -126,12 +133,13 @@ Item Item::MakeLocal(const string &full_path, long long size, const Metadata &me
   return item;
 }
 
-Item Item::MakeOriginal(long long size, const Metadata &meta, const Checksum &checksum) {
+Item Item::MakeOriginal(long long size, const Metadata &meta, const Checksum &checksum, const set<int> &versions) {
   Item item;
   item.type = MTI_ORIGINAL;
   item.p_size = size;
   item.p_metadata = meta;  
   item.css.push_back(make_pair(size, checksum));
+  item.needed_versions = versions;
   return item;
 }
 

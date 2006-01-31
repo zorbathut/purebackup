@@ -21,6 +21,7 @@
 
 #include <string>
 #include <vector>
+#include <set>
 
 #include "util.h"
 
@@ -76,6 +77,9 @@ public:
 
   Checksum checksum() const;
   Checksum checksumPart(int len) const;
+  
+  void addVersion(int x);
+  const set<int> &getVersions() const;
 
   bool exists() const { return type != MTI_NONEXISTENT; }
 
@@ -83,7 +87,7 @@ public:
 
   static Item MakeLocal(const string &full_path, long long size, const Metadata &meta);
   static Item MakeSsh(const string &user, const string &pass, const string &host, const string &full_path, long long size, const Metadata &meta);
-  static Item MakeOriginal(long long size, const Metadata &meta, const Checksum &checksum);
+  static Item MakeOriginal(long long size, const Metadata &meta, const Checksum &checksum, const set<int> &versions);
   
   Item();
 
@@ -100,6 +104,9 @@ private:
   string ssh_pass;
   string ssh_host;
   string ssh_path;
+
+  set<int> needed_versions;
+
 };
 
 inline bool operator==(const Item &lhs, const Item &rhs) {

@@ -74,7 +74,7 @@ public:
   
   void readFile(const string &fil);
 
-  void process(const Instruction &inst);
+  void process(const Instruction &inst, int tversion);
 
   const map<string, Item> &getItemDb() const;
   const Item *findItem(const string &name) const;

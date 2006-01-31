@@ -31,8 +31,9 @@ void State::readFile(const string &fil) {
   while(getkvDataInline(ifs, kvd)) {
     if(kvd.category == "file") {
       string itemname = kvd.consume("name");
+      vector<int> depend = sti(tokenize(kvd.consume("dependencies"), " "));
       CHECK(!items.count(itemname));
-      items[itemname] = Item::MakeOriginal(atoll(kvd.consume("size").c_str()), atoll(kvd.consume("timestamp").c_str()), atochecksum(kvd.consume("checksum_sha1").c_str()));
+      items[itemname] = Item::MakeOriginal(atoll(kvd.consume("size").c_str()), atoll(kvd.consume("timestamp").c_str()), atochecksum(kvd.consume("checksum_sha1").c_str()), set<int>(depend.begin(), depend.end()));
     } else {
       CHECK(0);
     }
@@ -51,18 +52,21 @@ const Item *State::findItem(const string &name) const {
 }
 
 
-void State::process(const Instruction &in) {
+void State::process(const Instruction &in, int tversion) {
   if(in.type == TYPE_CREATE) {
     CHECK(0);
   } else if(in.type == TYPE_ROTATE) {
     vector<Item> srcs;
     for(int i = 0; i < in.rotate_paths.size(); i++) {
       CHECK(items.count(in.rotate_paths[i].first));
-      srcs.push_back(Item::MakeOriginal(items[in.rotate_paths[i].first].size(), in.rotate_paths[i].second, items[in.rotate_paths[i].first].checksum()));
+      srcs.push_back(Item::MakeOriginal(items[in.rotate_paths[i].first].size(), in.rotate_paths[i].second, items[in.rotate_paths[i].first].checksum(), items[in.rotate_paths[i].first].getVersions()));
+      srcs.back().addVersion(tversion);
       //printf("%lld %s\n", srcs.back().metadata.timestamp, srcs.back().checksum().toString().c_str());
     }
     for(int i = 0; i < in.rotate_paths.size(); i++)
       items[in.rotate_paths[(i + 1) % in.rotate_paths.size()].first] = srcs[i];
+    for(int i = 0; i < in.rotate_paths.size(); i++)
+      items[in.rotate_paths[i].first].addVersion(tversion);
   } else if(in.type == TYPE_DELETE) {
     CHECK(items.count(in.delete_path));
     items.erase(items.find(in.delete_path));
@@ -70,17 +74,21 @@ void State::process(const Instruction &in) {
     //dprintf("Copying from %s\n", in.copy_source.c_str());
     //dprintf("%d\n", items.count(in.copy_source));
     CHECK(items.count(in.copy_source));
-    items[in.copy_dest] = Item::MakeOriginal(items[in.copy_source].size(), in.copy_dest_meta, items[in.copy_source].checksum());
+    items[in.copy_dest] = Item::MakeOriginal(items[in.copy_source].size(), in.copy_dest_meta, items[in.copy_source].checksum(), items[in.copy_source].getVersions());
+    items[in.copy_dest].addVersion(tversion);
   } else if(in.type == TYPE_APPEND) {
     CHECK(items.count(in.append_path));
-    items[in.append_path] = Item::MakeOriginal(in.append_size, in.append_meta, in.append_checksum);
+    items[in.append_path] = Item::MakeOriginal(in.append_size, in.append_meta, in.append_checksum, items[in.append_path].getVersions());
+    items[in.append_path].addVersion(tversion);
   } else if(in.type == TYPE_STORE) {
     if(items.count(in.store_path))
       items.erase(items.find(in.store_path));
-    items[in.store_path] = Item::MakeOriginal(in.store_size, in.store_meta, in.store_source->checksumPart(in.store_size));
+    items[in.store_path] = Item::MakeOriginal(in.store_size, in.store_meta, in.store_source->checksumPart(in.store_size), set<int>());
+    items[in.store_path].addVersion(tversion);
   } else if(in.type == TYPE_TOUCH) {
     CHECK(items.count(in.touch_path));
-    items[in.touch_path] = Item::MakeOriginal(items[in.touch_path].size(), in.touch_meta, items[in.touch_path].checksum());
+    items[in.touch_path] = Item::MakeOriginal(items[in.touch_path].size(), in.touch_meta, items[in.touch_path].checksum(), items[in.touch_path].getVersions());
+    // We're not going to add a version entry because the client can pull that data straight out of the information file
   } else {
     CHECK(0);
   }
@@ -95,6 +103,16 @@ void State::writeOut(const string &fn) const {
     kvd.kv["size"] = StringPrintf("%lld", itr->second.size());
     kvd.kv["timestamp"] = StringPrintf("%lld", itr->second.metadata().timestamp);
     kvd.kv["checksum_sha1"] = itr->second.checksum().toString();
+    {
+      const set<int> &vers = itr->second.getVersions();
+      string vs;
+      for(set<int>::const_iterator itr = vers.begin(); itr != vers.end(); itr++) {
+        if(itr != vers.begin())
+          vs += " ";
+        vs += StringPrintf("%d", *itr);
+      }
+      kvd.kv["dependencies"] = vs;
+    }
     putkvDataInline(ofs, kvd, "name");
   }
 }
