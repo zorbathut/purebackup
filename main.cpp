@@ -67,6 +67,35 @@ MountTree *getMountpointLocation(const string &loc) {
   return cpos;
 }
 
+bool isNulled(const string &loc) {
+
+  const char *tpt = loc.c_str();
+  MountTree *cpos = getRoot();
+  while(*tpt) {
+    CHECK(*tpt == '/');
+    tpt++;
+    CHECK(*tpt);
+  
+    if(cpos->type == MTT_NULL) {
+      printf("Null %s\n", loc.c_str());
+      return true;
+    }
+    
+    // isolate the next path component
+    const char *tpn = strchr(tpt, '/');
+    if(!tpn)
+      tpn = tpt + strlen(tpt);
+    
+    string linkage = string(tpt, tpn);
+    if(!cpos->links.count(linkage))
+      return false; // It can't be null because it doesn't exist!
+    cpos = &cpos->links[linkage];
+    
+    tpt = tpn;
+  }
+  return false;
+}
+
 void createMountpoint(const string &loc, const string &type, const string &source) {
   MountTree *dpt = getMountpointLocation(loc);
   CHECK(dpt);
@@ -543,13 +572,15 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
 }
 
 long long getTotalSizeUsed(const string &path) {
-  vector<DirListOut> dlo = getDirList(path);
+  pair<bool, vector<DirListOut> > dlo = getDirList(path);
+  if(dlo.first)
+    return 0;
   long long tsize = 0;
-  for(int i = 0; i < dlo.size(); i++) {
-    if(dlo[i].directory) {
-      tsize += getTotalSizeUsed(dlo[i].full_path);
+  for(int i = 0; i < dlo.second.size(); i++) {
+    if(dlo.second[i].directory) {
+      tsize += getTotalSizeUsed(dlo.second[i].full_path);
     } else {
-      tsize += dlo[i].size;
+      tsize += dlo.second[i].size;
     }
   }
   return tsize;
@@ -568,7 +599,8 @@ pair<int, int> inferDiscInfo() {
   long long usedsize = getTotalSizeUsed(drive);
   printf("%lld bytes used\n", usedsize);
   
-  vector<DirListOut> dlo = getDirList(drive);
+  // We ignore whether there's a disc or not - this code works even if there's an empty disc.
+  vector<DirListOut> dlo = getDirList(drive).second;
   
   if(dlo.size() == 0)
     return make_pair(-1, drivesize - usedsize);
@@ -860,14 +892,20 @@ int main(int argc, char **argv) {
     for(set<string>::iterator itr = ftc.begin(); itr != ftc.end(); itr++) {
       printf("%d/%d files examined\r", itpos++, ftc.size());
       fflush(stdout);
-      if(realitems.count(*itr)) {
+      
+      // If it's null, it doesn't exist in the real items because we couldn't scan it. However, if we're iterating over it, it *must* exist.
+      // Therefore, it must exist in the original items.
+      CHECK(!(isNulled(*itr) && !citem.count(make_pair(false, *itr))));
+      
+      // If it's null, we pretend it exists and is identical to what we currently have, which involves going through this section.
+      if(realitems.count(*itr) || isNulled(*itr)) {
         const Item &ite = realitems.find(*itr)->second;
         bool got = false;
         
         // First, we check to see if it's the same file as existed before
         if(!got && citem.count(make_pair(false, *itr))) {
           const Item &pite = citem.find(make_pair(false, *itr))->second;
-          if(ite.size() == pite.size() && ite.metadata() == pite.metadata()) {
+          if(ite.size() == pite.size() && ite.metadata() == pite.metadata() || isNulled(*itr)) {
             // It's identical!
             //printf("Preserve file %s\n", itr->c_str());
             fi.creates.push_back(make_pair(true, *itr));

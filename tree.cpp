@@ -37,9 +37,9 @@ bool MountTree::checkSanity() const {
       if(!itr->second.checkSanity())
         return false;
       if(type == MTT_VIRTUAL) {
-        CHECK(itr->second.type == MTT_VIRTUAL || itr->second.type == MTT_FILE || itr->second.type == MTT_SSH);
+        CHECK(itr->second.type == MTT_VIRTUAL || itr->second.type == MTT_FILE || itr->second.type == MTT_SSH || itr->second.type == MTT_NULL);
       } else if(type == MTT_FILE) {
-        CHECK(itr->second.type == MTT_FILE || itr->second.type == MTT_ITEM || itr->second.type == MTT_MASKED || itr->second.type == MTT_IMPLIED);
+        CHECK(itr->second.type == MTT_FILE || itr->second.type == MTT_ITEM || itr->second.type == MTT_MASKED || itr->second.type == MTT_IMPLIED || itr->second.type == MTT_NULL);
       } else if(type == MTT_IMPLIED) {
         CHECK(itr->second.type == MTT_MASKED || itr->second.type == MTT_IMPLIED);
       } else {
@@ -75,6 +75,11 @@ bool MountTree::checkSanity() const {
     CHECK(!ssh_source.size());
   }
   
+  if(type == MTT_NULL) {
+    checked = true;
+  } else {
+  }
+  
   CHECK(checked);
   
   return true;
@@ -88,6 +93,8 @@ void MountTree::print(int indent) const {
       itr->second.print(indent + 2);
     }
   } else if(type == MTT_ITEM) {
+  } else if(type == MTT_NULL) {
+    printf("%sNULL\n", spacing.c_str());
   } else if(type == MTT_IMPLIED) {
     for(map<string, MountTree>::const_iterator itr = links.begin(); itr != links.end(); itr++) {
       printf("%s%s\n", spacing.c_str(), itr->first.c_str());
@@ -100,6 +107,8 @@ void MountTree::print(int indent) const {
   }
 }
 
+int scanned = 0;
+
 void MountTree::scan() {
   if(type == MTT_VIRTUAL) {
     for(map<string, MountTree>::iterator itr = links.begin(); itr != links.end(); itr++) {
@@ -109,58 +118,37 @@ void MountTree::scan() {
     CHECK(!file_scanned);
   
     file_scanned = true;
-    vector<DirListOut> fils = getDirList(file_source);
+    pair<bool, vector<DirListOut> > tfils = getDirList(file_source);
+    if(tfils.first) {
+      *this = MountTree();
+      type = MTT_NULL;
+      return;
+    }
+    vector<DirListOut> fils = tfils.second;
     for(int i = 0; i < fils.size(); i++) {
-      if(fils[i].directory) {
-        if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
-          links[fils[i].itemname].type = MTT_FILE;
-          links[fils[i].itemname].file_source = fils[i].full_path;
-          links[fils[i].itemname].file_scanned = false;
-          links[fils[i].itemname].scan();
-        } else if(links[fils[i].itemname].type == MTT_MASKED) {
-        } else {
-          CHECK(0);
-        }
+      if(links[fils[i].itemname].type == MTT_MASKED)
+        continue;
+      scanned++;
+      if(scanned % 1000 == 0) {
+        printf("%d scanned\r", scanned);
+        fflush(stdout);
+      }
+      CHECK(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED);
+      if(fils[i].null) {
+        links[fils[i].itemname] = MountTree();    // we need to obliterate this entirely
+        links[fils[i].itemname].type = MTT_NULL;  // TODO: Maybe we don't want to, if there's masked stuff beneath it?
+      } else if(fils[i].directory) {      
+        links[fils[i].itemname].type = MTT_FILE;
+        links[fils[i].itemname].file_source = fils[i].full_path;
+        links[fils[i].itemname].file_scanned = false;
+        links[fils[i].itemname].scan();
       } else {
-        if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
-          links[fils[i].itemname].type = MTT_ITEM;
-          links[fils[i].itemname].item = Item::MakeLocal(fils[i].full_path, fils[i].size, Metadata(fils[i].timestamp));
-        } else if(links[fils[i].itemname].type == MTT_MASKED) {
-        } else {
-          CHECK(0);
-        }
+        links[fils[i].itemname].type = MTT_ITEM;
+        links[fils[i].itemname].item = Item::MakeLocal(fils[i].full_path, fils[i].size, Metadata(fils[i].timestamp));
       }
     }
   } else if(type == MTT_SSH) {
-    CHECK(!ssh_scanned);
-    
-    ssh_scanned = true;
-    vector<DirListOut> fils = getSSHDirList(ssh_user, ssh_pass, ssh_host, ssh_source);
-    for(int i = 0; i < fils.size(); i++) {
-      if(fils[i].directory) {
-        if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
-          links[fils[i].itemname].type = MTT_SSH;
-          links[fils[i].itemname].ssh_user = ssh_user;
-          links[fils[i].itemname].ssh_pass = ssh_pass;
-          links[fils[i].itemname].ssh_host = ssh_host;
-          links[fils[i].itemname].ssh_source = fils[i].full_path;
-          links[fils[i].itemname].ssh_scanned = false;
-          links[fils[i].itemname].scan();
-        } else if(links[fils[i].itemname].type == MTT_MASKED) {
-        } else {
-          CHECK(0);
-        }
-      } else {
-        if(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED) {
-          links[fils[i].itemname].type = MTT_ITEM;
-          links[fils[i].itemname].item = Item::MakeSsh(ssh_user, ssh_pass, ssh_host, fils[i].full_path, fils[i].size, Metadata(fils[i].timestamp));
-        } else if(links[fils[i].itemname].type == MTT_MASKED) {
-        } else {
-          CHECK(0);
-        }
-      }
-    }
-    
+    CHECK(0);
   } else {
     CHECK(0);
   }
@@ -174,8 +162,9 @@ void MountTree::dumpItems(map<string, Item> *items, string cpath) const {
   } else if(type == MTT_ITEM) {
     CHECK(!items->count(cpath));
     (*items)[cpath] = item;
-  } else if(type == MTT_MASKED) {
+  } else if(type == MTT_MASKED || type == MTT_NULL) {
   } else {
+    printf("Type is %d\n", type);
     CHECK(0);
   }
 }

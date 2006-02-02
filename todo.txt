@@ -1,4 +1,4 @@
-- Add state tracking
+- Deal with read failures better
 
 - Samba/SSH support
 - Make rotate sane

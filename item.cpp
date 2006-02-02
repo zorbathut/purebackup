@@ -89,7 +89,10 @@ Checksum Item::checksumPart(int len) const {
   SHA_CTX c;
   SHA1_Init(&c);
   FILE *phil = fopen(local_path.c_str(), "rb");
-  CHECK(phil);
+  if(!phil) {
+    printf("Couldn't open %s\n", local_path.c_str());
+    CHECK(phil);
+  }
   while(1) {
     char buf[1024*128];
     int rv = fread(buf, 1, sizeof(buf), phil);

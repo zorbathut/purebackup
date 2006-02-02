@@ -41,13 +41,13 @@ string StringPrintf( const char *bort, ... ) __attribute__((format(printf,1,2)))
 struct DirListOut {
 public:
   bool directory;
+  bool null;
   string full_path;
   string itemname;
   long long size;
   long long timestamp;
 };
 
-vector<DirListOut> getDirList(const string &path);
-vector<DirListOut> getSSHDirList(const string &user, const string &pass, const string &host, const string &path);
+pair<bool, vector<DirListOut> > getDirList(const string &path);
 
 #endif

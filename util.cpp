@@ -64,11 +64,11 @@ string StringPrintf( const char *bort, ... ) {
 
 };
 
-vector<DirListOut> getDirList(const string &path) {
+pair<bool, vector<DirListOut> > getDirList(const string &path) {
   vector<DirListOut> rv;
   DIR *od = opendir(path.c_str());
   if(!od)
-    return vector<DirListOut>();
+    return make_pair(true, vector<DirListOut>());
   CHECK(od);
   dirent *dire;
   while(dire = readdir(od)) {
@@ -76,44 +76,25 @@ vector<DirListOut> getDirList(const string &path) {
       continue;
     struct stat stt;
     //printf("%s\n", (path + "/" + dire->d_name).c_str());
+    DirListOut dlo;
     if(stat((path + "/" + dire->d_name).c_str(), &stt)) {
       printf("Error reading %s\n", (path + "/" + dire->d_name).c_str());
-      CHECK(0);
+      dlo.null = true;
+      dlo.directory = false;
+      dlo.full_path = path + "/" + dire->d_name;
+      dlo.itemname = dire->d_name;
+      dlo.size = 0;
+      dlo.timestamp = 0;
+    } else {
+      dlo.null = false;
+      dlo.directory = stt.st_mode & S_IFDIR;
+      dlo.full_path = path + "/" + dire->d_name;
+      dlo.itemname = dire->d_name;
+      dlo.size = stt.st_size;
+      dlo.timestamp = stt.st_mtime;
     }
-    DirListOut dlo;
-    dlo.directory = stt.st_mode & S_IFDIR;
-    dlo.full_path = path + "/" + dire->d_name;
-    dlo.itemname = dire->d_name;
-    dlo.size = stt.st_size;
-    dlo.timestamp = stt.st_mtime;
     rv.push_back(dlo);
   }
-  return rv;
-}
-
-vector<DirListOut> getSSHDirList(const string &user, const string &pass, const string &host, const string &path) {
-  vector<DirListOut> rv;
-  DIR *od = opendir(path.c_str());
-  if(!od)
-    return vector<DirListOut>();
-  CHECK(od);
-  dirent *dire;
-  while(dire = readdir(od)) {
-    if(strcmp(dire->d_name, ".") == 0 || strcmp(dire->d_name, "..") == 0)
-      continue;
-    struct stat stt;
-    //printf("%s\n", (path + "/" + dire->d_name).c_str());
-    if(stat((path + "/" + dire->d_name).c_str(), &stt)) {
-      printf("Error reading %s\n", (path + "/" + dire->d_name).c_str());
-      CHECK(0);
-    }
-    DirListOut dlo;
-    dlo.directory = stt.st_mode & S_IFDIR;
-    dlo.full_path = path + "/" + dire->d_name;
-    dlo.itemname = dire->d_name;
-    dlo.size = stt.st_size;
-    dlo.timestamp = stt.st_mtime;
-    rv.push_back(dlo);
-  }
-  return rv;
+  closedir(od);
+  return make_pair(false, rv);
 }
