@@ -812,6 +812,8 @@ void restore(const string &src, const string &dst) {
   }
 }
 
+long long cssi = 0;
+
 int main(int argc, char **argv) {
   
   if(argc != 2) {
@@ -885,12 +887,14 @@ int main(int argc, char **argv) {
       ftc.insert(itr->first);
     }
     
+    printf("Starting examining\n");
+    
     int itpos = 0;
     // FTC is the union of the files in realitems and origstate
     // citem is the items that we can look at
     // citemsizemap is the same, only organized by size
     for(set<string>::iterator itr = ftc.begin(); itr != ftc.end(); itr++) {
-      printf("%d/%d files examined\r", itpos++, ftc.size());
+      printf("%d/%d files examined, %lld bytes\r", itpos++, ftc.size(), cssi);
       fflush(stdout);
       
       // If it's null, it doesn't exist in the real items because we couldn't scan it. However, if we're iterating over it, it *must* exist.
@@ -902,10 +906,21 @@ int main(int argc, char **argv) {
         const Item &ite = realitems.find(*itr)->second;
         bool got = false;
         
+        // If either of these are true, we don't have adequate data - if it's null we're saving it from deletion,
+        // if it's merely unreadable we're simply ignoring it
+        if(isNulled(*itr) || !ite.isReadable()) {
+          if(citem.count(make_pair(false, *itr))) {
+            fi.creates.push_back(make_pair(true, *itr));
+            got = true;
+          } else {
+            continue;
+          }
+        }
+        
         // First, we check to see if it's the same file as existed before
         if(!got && citem.count(make_pair(false, *itr))) {
           const Item &pite = citem.find(make_pair(false, *itr))->second;
-          if(ite.size() == pite.size() && ite.metadata() == pite.metadata() || isNulled(*itr)) {
+          if(ite.size() == pite.size() && ite.metadata() == pite.metadata()) {
             // It's identical!
             //printf("Preserve file %s\n", itr->c_str());
             fi.creates.push_back(make_pair(true, *itr));
@@ -943,7 +958,6 @@ int main(int argc, char **argv) {
         // Okay, now we see if it's been copied from somewhere
         if(!got) {
           const vector<pair<bool, string> > &sli = citemsizemap[ite.size()];
-          //printf("Trying %d originals\n", sli.size());
           for(int k = 0; k < sli.size(); k++) {
             CHECK(ite.size() == citem[sli[k]].size());
             //printf("Comparing with %d:%s\n", sli[k].first, sli[k].second.c_str());

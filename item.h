@@ -82,6 +82,7 @@ public:
   const set<int> &getVersions() const;
 
   bool exists() const { return type != MTI_NONEXISTENT; }
+  bool isReadable() const;
 
   string toString() const;
 
@@ -97,6 +98,8 @@ private:
   int type;
   long long p_size;
   Metadata p_metadata;
+
+  mutable int readable;  // 0 for not readable, 1 for readable, -1 for unknown
 
   string local_path;
 

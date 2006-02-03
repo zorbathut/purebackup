@@ -76,7 +76,11 @@ Checksum Item::checksum() const {
   return checksumPart(size());
 }
 
+extern long long cssi;
+
 Checksum Item::checksumPart(int len) const {
+  CHECK(isReadable());
+
   for(int i = 0; i < css.size(); i++) {
     if(css[i].first == len)
       return css[i].second;
@@ -90,19 +94,21 @@ Checksum Item::checksumPart(int len) const {
   SHA1_Init(&c);
   FILE *phil = fopen(local_path.c_str(), "rb");
   if(!phil) {
-    printf("Couldn't open %s\n", local_path.c_str());
-    CHECK(phil);
+    printf("Couldn't open %s during checksum\n", local_path.c_str());
+    CHECK(isReadable());
+    CHECK(0);
   }
   while(1) {
-    char buf[1024*128];
+    char buf[1024*512];
     int rv = fread(buf, 1, sizeof(buf), phil);
     
     if(bytu + rv >= len) {
       SHA1_Update(&c, buf, len - bytu);
       Checksum tcs;
       SHA1_Final(tcs.bytes, &c);
-      css.push_back(make_pair(len, tcs));
       fclose(phil);
+      cssi += len;
+      css.push_back(make_pair(len, tcs));
       return tcs;
     } else {
       SHA1_Update(&c, buf, rv);
@@ -122,6 +128,26 @@ void Item::addVersion(int x) {
 const set<int> &Item::getVersions() const {
   return needed_versions;
 }
+
+bool Item::isReadable() const {
+  if(readable == -1) {
+    if(type == MTI_LOCAL) {
+      readable = 1;
+      FILE *fil = fopen(local_path.c_str(), "rb");
+      if(!fil) {
+        printf("Cannot read %s\n", local_path.c_str());
+        readable = 0;
+      } else {
+        fclose(fil);
+      }
+    } else if(type == MTI_ORIGINAL) {
+      readable = 1; // for certain definitions of readable, I suppose
+    } else {
+      CHECK(0);
+    }
+  }
+  return readable == 1;
+};
 
 string Item::toString() const {
   return StringPrintf("%lld %lld %s", size(), metadata().timestamp, checksum().toString().c_str());
@@ -160,5 +186,6 @@ Item Item::MakeSsh(const string &user, const string &pass, const string &host, c
 
 Item::Item() {
   type = MTI_NONEXISTENT;
+  readable = -1;
 }
 
