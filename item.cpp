@@ -36,20 +36,6 @@ Metadata metaParseFromKvd(kvData kvd) {
   return mtd;
 }
 
-string Checksum::toString() const {
-  string ostr;
-  for(int i = 0; i < 20; i++) {
-    char bf[8];
-    sprintf(bf, "%02x", bytes[i]);
-    ostr += bf;
-  }
-  return ostr;
-}
-
-bool operator==(const Checksum &lhs, const Checksum &rhs) {
-  return !memcmp(lhs.bytes, rhs.bytes, sizeof(lhs.bytes));
-}
-
 void ItemShunt::seek(long long pos) {
   fseeko(local_file, pos, SEEK_SET);
 }
@@ -70,6 +56,50 @@ ItemShunt *Item::open() const {
   is->local_file = fopen(local_path.c_str(), "rb");
   CHECK(is->local_file);
   return is;
+}
+
+Checksum Item::signature() const {
+  return signaturePart(size());
+}
+
+Checksum Item::signaturePart(long long len) const {
+  CHECK(isReadable());
+  
+  for(int i = 0; i < sss.size(); i++) {
+    if(sss[i].first == len)
+      return sss[i].second;
+  }
+  
+  for(int i = 0; i < css.size(); i++) {
+    if(css[i].first == len) {
+      Checksum cst = css[i].second;
+      memset(cst.bytes, 0, sizeof(cst.bytes));
+      sss.push_back(make_pair(len, cst));
+      return cst;
+    }
+  }
+  
+  CHECK(type == MTI_LOCAL);
+  
+  Checksum tcs;
+  memset(tcs.bytes, 0, sizeof(tcs.bytes));
+  memset(tcs.signature, 0, sizeof(tcs.signature));
+  
+  long long poss = (len - sizeof(tcs.signature)) / 2;
+  if(poss < 0)
+    poss = 0;
+  long long pose = poss + 32;
+  if(pose > size())
+    pose = size();
+  
+  ItemShunt *snt = open();
+  snt->seek(poss);
+  snt->read((char*)tcs.signature, pose - poss);
+  delete snt;
+  
+  sss.push_back(make_pair(len, tcs));
+  
+  return tcs;
 }
 
 Checksum Item::checksum() const {
@@ -105,7 +135,7 @@ Checksum Item::checksumPart(long long len) const {
     
     if(bytu + rv >= len) {
       SHA1_Update(&c, buf, len - bytu);
-      Checksum tcs;
+      Checksum tcs = signaturePart(len);
       SHA1_Final(tcs.bytes, &c);
       fclose(phil);
       cssi += len;
@@ -191,8 +221,26 @@ Item::Item() {
   readable = -1;
 }
 
+int if_presig = 0;
+int if_mid = 0;
+int if_full = 0;
+
 bool identicalFile(const Item &lhs, const Item &rhs, long long bytes) {
-  if(bytes == -1)
-    return lhs.size() == rhs.size() && lhs.checksum() == rhs.checksum();
-  return lhs.checksumPart(bytes) == rhs.checksumPart(bytes);
+  if(bytes == -1) {
+    if(lhs.size() != rhs.size())
+      return false; // this shouldn't actually happen
+    if_presig++;
+    if(!(lhs.signature() == rhs.signature()))
+      return false;
+    if_mid++;
+    if(!(lhs.checksum() == rhs.checksum())) {
+      //Checksum cs = lhs.signature();
+      //printf("%s\n", cs.toString().c_str());
+      //printf("%s and %s\n", lhs.local_path.c_str(), rhs.local_path.c_str());
+      return false;
+    }
+    if_full++;
+    return true;
+  }
+  return lhs.signaturePart(bytes) == rhs.signaturePart(bytes) && lhs.checksumPart(bytes) == rhs.checksumPart(bytes);
 }

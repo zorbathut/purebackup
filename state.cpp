@@ -33,7 +33,7 @@ void State::readFile(const string &fil) {
       string itemname = kvd.consume("name");
       vector<int> depend = sti(tokenize(kvd.consume("dependencies"), " "));
       CHECK(!items.count(itemname));
-      items[itemname] = Item::MakeOriginal(atoll(kvd.consume("size").c_str()), atoll(kvd.consume("timestamp").c_str()), atochecksum(kvd.consume("checksum_sha1").c_str()), set<int>(depend.begin(), depend.end()));
+      items[itemname] = Item::MakeOriginal(atoll(kvd.consume("size").c_str()), atoll(kvd.consume("timestamp").c_str()), atochecksum(kvd.consume("checksum").c_str()), set<int>(depend.begin(), depend.end()));
     } else {
       CHECK(0);
     }
@@ -102,7 +102,7 @@ void State::writeOut(const string &fn) const {
     kvd.kv["name"] = itr->first;
     kvd.kv["size"] = StringPrintf("%lld", itr->second.size());
     kvd.kv["timestamp"] = StringPrintf("%lld", itr->second.metadata().timestamp);
-    kvd.kv["checksum_sha1"] = itr->second.checksum().toString();
+    kvd.kv["checksum"] = itr->second.checksum().toString();
     {
       const set<int> &vers = itr->second.getVersions();
       string vs;

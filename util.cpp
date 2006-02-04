@@ -18,6 +18,7 @@
 
 #include "util.h"
 #include "debug.h"
+#include "parse.h"
 
 #include <stdarg.h>
 #include <sys/types.h>
@@ -33,14 +34,42 @@ long long atoll(const char *in) {
   return foo;
 }
 
-Checksum atochecksum(const char *in) {
-  Checksum cs;
-  for(int i = 0; i < 20; i++) {
+string outputHex(const unsigned char *dat, int size) {
+  string ostr;
+  for(int i = 0; i < size; i++) {
+    char bf[8];
+    sprintf(bf, "%02x", dat[i]);
+    ostr += bf;
+  }
+  return ostr;
+}
+
+void readHex(unsigned char *dest, int size, const string &dat) {
+  const char *in = dat.c_str();
+  for(int i = 0; i < size; i++) {
     int k;
     sscanf(string(in + i * 2, in + i * 2 + 2).c_str(), "%x", &k);
-    cs.bytes[i] = k;
+    dest[i] = k;
   }
-  CHECK(strcmp(in, cs.toString().c_str()) == 0);
+  CHECK(outputHex(dest, size) == dat);
+}
+
+string Checksum::toString() const {
+  kvData kvd;
+  kvd.category = "checksum";
+  kvd.kv["sha1"] = outputHex(bytes, sizeof(bytes));
+  kvd.kv["signature"] = outputHex(signature, sizeof(signature));
+  return putkvDataInlineString(kvd);
+}
+
+Checksum atochecksum(const char *in) {
+  kvData kvd = getkvDataInlineString(in);
+  CHECK(kvd.category == "checksum");
+  Checksum cs;
+  
+  readHex(cs.bytes, sizeof(cs.bytes), kvd.consume("sha1"));
+  readHex(cs.signature, sizeof(cs.signature), kvd.consume("signature"));
+  
   return cs;
 }
 
@@ -98,3 +127,8 @@ pair<bool, vector<DirListOut> > getDirList(const string &path) {
   closedir(od);
   return make_pair(false, rv);
 }
+
+bool operator==(const Checksum &lhs, const Checksum &rhs) {
+  return !memcmp(lhs.bytes, rhs.bytes, sizeof(lhs.bytes)) && !memcmp(lhs.signature, rhs.signature, sizeof(lhs.signature)) ;
+}
+

@@ -78,6 +78,9 @@ public:
   Checksum checksum() const;
   Checksum checksumPart(long long len) const;
   
+  Checksum signature() const;
+  Checksum signaturePart(long long len) const;  // Same as a checksum, but with the checksum part 0'ed.
+  
   void addVersion(int x);
   const set<int> &getVersions() const;
 
@@ -92,8 +95,9 @@ public:
   
   Item();
 
-private:
+public:
   mutable vector<pair<int, Checksum> > css;
+  mutable vector<pair<int, Checksum> > sss;
 
   int type;
   long long p_size;

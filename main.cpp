@@ -373,7 +373,7 @@ Checksum writeToZip(const Item *source, long long start, long long end, zipFile 
   
   delete shunt;
   
-  Checksum csr;
+  Checksum csr = source->signaturePart(end); // because I'm lazy
   SHA1_Final(csr.bytes, &c);
   return csr;
 }
@@ -586,7 +586,7 @@ long long getTotalSizeUsed(const string &path) {
   return tsize;
 }
 
-pair<int, int> inferDiscInfo() {
+pair<int, long long> inferDiscInfo() {
   // For one thing, we don't know how much data we can actually hold
   // For another thing, we don't know anything about our various overheads
   // And for a third thing, we basically, essentially, don't know anything
@@ -813,6 +813,9 @@ void restore(const string &src, const string &dst) {
 }
 
 long long cssi = 0;
+extern int if_presig;
+extern int if_mid;
+extern int if_full;
 
 int main(int argc, char **argv) {
   
@@ -824,7 +827,7 @@ int main(int argc, char **argv) {
   string command = argv[1];
   if(command == "backup") {
   
-    pair<int, int> inf = inferDiscInfo();
+    pair<int, long long> inf = inferDiscInfo();
     if(inf.second < 1048576) {
       printf("New disc, fucker!\n");
       return 0;
@@ -911,7 +914,7 @@ int main(int argc, char **argv) {
     // citemsizemap is the same, only organized by size
     for(set<string>::iterator itr = ftc.begin(); itr != ftc.end(); itr++) {
       if(ltime != time(NULL)) {
-        printf("%d/%d files examined, %lld bytes read from disk, looking at %s now\r", itpos, ftc.size(), cssi, itr->c_str());
+        printf("%d/%d files examined, %d/%d/%d, %lld bytes read from disk, looking at %s now\r", itpos, ftc.size(), if_presig, if_mid, if_full, cssi, itr->c_str());
         ltime = time(NULL);
       }
       itpos++;

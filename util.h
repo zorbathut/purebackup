@@ -28,6 +28,8 @@ class Checksum {
 public:
   unsigned char bytes[20];
 
+  unsigned char signature[32];   // A chunk in the middle, rounded down, or the entire file with 0's appended.
+
   string toString() const;
 };
 
