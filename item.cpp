@@ -43,8 +43,9 @@ int ItemShunt::read(char *buffer, int len) {
   return fread(buffer, 1, len, local_file);
 }
 
-ItemShunt::ItemShunt() {
-  local_file = NULL;
+ItemShunt::ItemShunt(const string &local_fname) {
+  local_file = fopen(local_fname.c_str(), "rb");
+  CHECK(local_file);
 }
 ItemShunt::~ItemShunt() {
   fclose(local_file);
@@ -52,10 +53,7 @@ ItemShunt::~ItemShunt() {
 
 ItemShunt *Item::open() const {
   CHECK(type == MTI_LOCAL);
-  ItemShunt *is = new ItemShunt;
-  is->local_file = fopen(local_path.c_str(), "rb");
-  CHECK(is->local_file);
-  return is;
+  return new ItemShunt(local_path.c_str());
 }
 
 Checksum Item::signature() const {
@@ -123,7 +121,7 @@ Checksum Item::checksumPart(long long len) const {
   
   SHA_CTX c;
   SHA1_Init(&c);
-  FILE *phil = fopen(local_path.c_str(), "rb");
+  ItemShunt *phil = open();
   if(!phil) {
     printf("Couldn't open %s during checksum\n", local_path.c_str());
     CHECK(isReadable());
@@ -131,13 +129,13 @@ Checksum Item::checksumPart(long long len) const {
   }
   while(1) {
     char buf[1024*512];
-    int rv = fread(buf, 1, sizeof(buf), phil);
+    int rv = phil->read(buf, sizeof(buf));
     
     if(bytu + rv >= len) {
       SHA1_Update(&c, buf, len - bytu);
       Checksum tcs = signaturePart(len);
       SHA1_Final(tcs.bytes, &c);
-      fclose(phil);
+      delete phil;
       cssi += len;
       css.push_back(make_pair(len, tcs));
       return tcs;

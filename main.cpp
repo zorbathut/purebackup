@@ -1062,7 +1062,7 @@ int main(int argc, char **argv) {
     //system("rm -rf temp");  // this is obviously dangerous, dur
     system("mkdir temp");
     
-    printf("Generating archive of at most %d bytes\n", inf.second);
+    printf("Generating archive of at most %lld bytes\n", inf.second);
     
     bool spaceleft;
     

@@ -54,15 +54,16 @@ inline bool operator!=(const Metadata &lhs, const Metadata &rhs) {
 
 class ItemShunt {
 public:
-  FILE *local_file;
-
   void seek(long long pos);
   int read(char *buffer, int len);
 
-  ItemShunt();
+  ItemShunt(const string &local_fname);
   ~ItemShunt();
 
-private:
+private:  
+  
+  FILE *local_file;
+
   ItemShunt(const ItemShunt &is); // do not implement
   void operator=(const ItemShunt &is); // do not implement
 };
