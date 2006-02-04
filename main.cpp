@@ -594,7 +594,7 @@ pair<int, int> inferDiscInfo() {
   
   //const string drive = "/cygdrive/d";
   const string drive = "/cygdrive/c/werk/sea/purebackup/temp";
-  const long long drivesize = 100*1024*1024;
+  const long long drivesize = 4600ll*1024*1024;
   
   long long usedsize = getTotalSizeUsed(drive);
   printf("%lld bytes used\n", usedsize);
@@ -871,11 +871,25 @@ int main(int argc, char **argv) {
     
     vector<Instruction> inst;
     
+    //map<long long, int> sizefreq;
+    
     for(map<string, Item>::iterator itr = realitems.begin(); itr != realitems.end(); itr++) {
       CHECK(itr->second.size() >= 0);
       CHECK(itr->second.metadata().timestamp >= 0);
       ftc.insert(itr->first);
+      //sizefreq[itr->second.size()]++;
     }
+    
+    /*
+    {
+      FILE *sfq = fopen("sizefreq.txt", "w");
+      for(map<long long, int>::iterator itr = sizefreq.begin(); itr != sizefreq.end(); itr++)
+        if(itr->second > 1)
+          fprintf(sfq, "%lld: %d\n", itr->first, itr->second);
+      fclose(sfq);
+    }
+    
+    return 0;*/
     
     for(map<string, Item>::const_iterator itr = origstate.getItemDb().begin(); itr != origstate.getItemDb().end(); itr++) {
       CHECK(itr->second.size() >= 0);
@@ -889,12 +903,18 @@ int main(int argc, char **argv) {
     
     printf("Starting examining\n");
     
+    int ltime = 0;
+    
     int itpos = 0;
     // FTC is the union of the files in realitems and origstate
     // citem is the items that we can look at
     // citemsizemap is the same, only organized by size
     for(set<string>::iterator itr = ftc.begin(); itr != ftc.end(); itr++) {
-      printf("%d/%d files examined, %lld bytes\r", itpos++, ftc.size(), cssi);
+      if(ltime != time(NULL)) {
+        printf("%d/%d files examined, %lld bytes read from disk, looking at %s now\r", itpos, ftc.size(), cssi, itr->c_str());
+        ltime = time(NULL);
+      }
+      itpos++;
       fflush(stdout);
       
       // If it's null, it doesn't exist in the real items because we couldn't scan it. However, if we're iterating over it, it *must* exist.
@@ -925,7 +945,7 @@ int main(int argc, char **argv) {
             //printf("Preserve file %s\n", itr->c_str());
             fi.creates.push_back(make_pair(true, *itr));
             got = true;
-          } else if(ite.size() == pite.size() && ite.checksum() == pite.checksum()) {
+          } else if(ite.size() == pite.size() && identicalFile(ite, pite)) {
             // It's touched!
             CHECK(ite.metadata() != pite.metadata());
             //printf("Touching file %s\n", itr->c_str());
@@ -937,7 +957,7 @@ int main(int argc, char **argv) {
             ti.touch_meta = ite.metadata();
             inst.push_back(ti);
             got = true;
-          } else if(ite.size() > pite.size() && ite.checksumPart(pite.size()) == pite.checksum()) {
+          } else if(ite.size() > pite.size() && identicalFile(ite, pite, pite.size())) {
             // It's appended!
             //printf("Appendination on %s, dude!\n", itr->c_str());
             Instruction ti;
@@ -960,9 +980,7 @@ int main(int argc, char **argv) {
           const vector<pair<bool, string> > &sli = citemsizemap[ite.size()];
           for(int k = 0; k < sli.size(); k++) {
             CHECK(ite.size() == citem[sli[k]].size());
-            //printf("Comparing with %d:%s\n", sli[k].first, sli[k].second.c_str());
-            //printf("%s vs %s\n", ite.checksum().toString().c_str(), citem[sli[k]].checksum().toString().c_str());
-            if(ite.checksum() == citem[sli[k]].checksum()) {
+            if(identicalFile(ite, citem[sli[k]])) {
               //printf("Holy crapcock! Copying %s from %s:%d! MADNESS\n", itr->c_str(), sli[k].second.c_str(), sli[k].first);
               Instruction ti;
               ti.type = TYPE_COPY;

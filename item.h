@@ -76,7 +76,7 @@ public:
   ItemShunt *open() const;
 
   Checksum checksum() const;
-  Checksum checksumPart(int len) const;
+  Checksum checksumPart(long long len) const;
   
   void addVersion(int x);
   const set<int> &getVersions() const;
@@ -115,5 +115,8 @@ private:
 inline bool operator==(const Item &lhs, const Item &rhs) {
   return lhs.size() == rhs.size() && lhs.metadata() == rhs.metadata() && lhs.checksum() == rhs.checksum();
 }
+
+// Various optimizations possible
+bool identicalFile(const Item &lhs, const Item &rhs, long long bytes = -1);
 
 #endif

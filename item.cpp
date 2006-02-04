@@ -78,7 +78,7 @@ Checksum Item::checksum() const {
 
 extern long long cssi;
 
-Checksum Item::checksumPart(int len) const {
+Checksum Item::checksumPart(long long len) const {
   CHECK(isReadable());
 
   for(int i = 0; i < css.size(); i++) {
@@ -87,8 +87,9 @@ Checksum Item::checksumPart(int len) const {
   }
   
   CHECK(type == MTI_LOCAL);
+  //printf("Doing full checksum of %s\n", local_path.c_str());
   
-  int bytu = 0;
+  long long bytu = 0;
   
   SHA_CTX c;
   SHA1_Init(&c);
@@ -115,6 +116,7 @@ Checksum Item::checksumPart(int len) const {
     }
     bytu += rv;
     if(rv != sizeof(buf)) {
+      printf("Trying to read %lld from %s, only picked up %lld, last value %d!\n", len, local_path.c_str(), bytu + rv, rv);
       CHECK(0);
     }
   }
@@ -189,3 +191,8 @@ Item::Item() {
   readable = -1;
 }
 
+bool identicalFile(const Item &lhs, const Item &rhs, long long bytes) {
+  if(bytes == -1)
+    return lhs.size() == rhs.size() && lhs.checksum() == rhs.checksum();
+  return lhs.checksumPart(bytes) == rhs.checksumPart(bytes);
+}
