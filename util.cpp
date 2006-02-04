@@ -106,7 +106,7 @@ pair<bool, vector<DirListOut> > getDirList(const string &path) {
     struct stat stt;
     //printf("%s\n", (path + "/" + dire->d_name).c_str());
     DirListOut dlo;
-    if(stat((path + "/" + dire->d_name).c_str(), &stt)) {
+    if(lstat((path + "/" + dire->d_name).c_str(), &stt)) {
       printf("Error reading %s\n", (path + "/" + dire->d_name).c_str());
       dlo.null = true;
       dlo.directory = false;

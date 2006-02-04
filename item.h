@@ -23,6 +23,13 @@
 #include <vector>
 #include <set>
 
+#ifdef WIN32API
+#define WIN32_LEAN_AND_MEAN
+#define VC_EXTRALEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
+
 #include "util.h"
 
 using namespace std;
@@ -57,13 +64,19 @@ public:
   void seek(long long pos);
   int read(char *buffer, int len);
 
-  ItemShunt(const string &local_fname);
   ~ItemShunt();
 
-private:  
-  
-  FILE *local_file;
+  static ItemShunt* LocalFile(const string &fname);
 
+private:  
+
+#ifdef WIN32API
+  HANDLE local_file;
+#else
+  FILE *local_file;
+#endif
+
+  ItemShunt();
   ItemShunt(const ItemShunt &is); // do not implement
   void operator=(const ItemShunt &is); // do not implement
 };
@@ -96,7 +109,7 @@ public:
   
   Item();
 
-public:
+private:
   mutable vector<pair<int, Checksum> > css;
   mutable vector<pair<int, Checksum> > sss;
 

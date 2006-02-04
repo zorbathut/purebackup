@@ -1,6 +1,6 @@
 
 SOURCES = main parse debug tree item state util minizip/zip minizip/unzip minizip/ioapi
-CPPFLAGS = -DVECTOR_PARANOIA -Wall -Wno-sign-compare -Wno-uninitialized -O2 #-g -pg
+CPPFLAGS = -DVECTOR_PARANOIA -Wall -Wno-sign-compare -Wno-uninitialized -O2 -DWIN32API #-g -pg
 CFLAGS = -O2 #-g -pg
 LINKFLAGS = -lcrypto -lz -O2 #-g -pg
 

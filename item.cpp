@@ -36,6 +36,37 @@ Metadata metaParseFromKvd(kvData kvd) {
   return mtd;
 }
 
+#ifdef WIN32API
+void ItemShunt::seek(long long pos) {
+  LONG low = pos;
+  LONG high = pos >> 32;
+  SetFilePointer(local_file, low, &high, FILE_BEGIN);
+  CHECK(GetLastError() == NO_ERROR);
+}
+int ItemShunt::read(char *buffer, int len) {
+  DWORD out;
+  CHECK(ReadFile(local_file, buffer, len, &out, NULL));
+  return out;
+}
+
+ItemShunt* ItemShunt::LocalFile(const string &local_fname) {
+  HANDLE local_file = CreateFile(local_fname.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+  if(local_file == INVALID_HANDLE_VALUE) {
+    printf("Failure at opening %s!\n", local_fname.c_str());
+    return NULL;
+  }
+  
+  ItemShunt *isr = new ItemShunt;
+  isr->local_file = local_file;
+  return isr;
+}
+ItemShunt::ItemShunt() {
+  local_file = NULL;
+}
+ItemShunt::~ItemShunt() {
+  CloseHandle(local_file);
+}
+#else
 void ItemShunt::seek(long long pos) {
   fseeko(local_file, pos, SEEK_SET);
 }
@@ -50,10 +81,11 @@ ItemShunt::ItemShunt(const string &local_fname) {
 ItemShunt::~ItemShunt() {
   fclose(local_file);
 }
+#endif
 
 ItemShunt *Item::open() const {
   CHECK(type == MTI_LOCAL);
-  return new ItemShunt(local_path.c_str());
+  return ItemShunt::LocalFile(local_path);
 }
 
 Checksum Item::signature() const {
@@ -163,12 +195,12 @@ bool Item::isReadable() const {
   if(readable == -1) {
     if(type == MTI_LOCAL) {
       readable = 1;
-      FILE *fil = fopen(local_path.c_str(), "rb");
+      ItemShunt *fil = open();
       if(!fil) {
         printf("Cannot read %s\n", local_path.c_str());
         readable = 0;
       } else {
-        fclose(fil);
+        delete fil;
       }
     } else if(type == MTI_ORIGINAL) {
       readable = 1; // for certain definitions of readable, I suppose

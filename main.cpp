@@ -344,7 +344,7 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
   return kinstr;
 }
 
-Checksum writeToZip(const Item *source, long long start, long long end, zipFile dest) {
+Checksum writeToZip(const Item *source, long long start, long long end, zipFile dest, const string &outfname) {
   // One problem here - we have to read the entire file just to get the right checksum. This is something that should be fixed in the future, but isn't yet, and I'm not quite sure how.
   //printf("%lld, %lld\n", start, end);
   SHA_CTX c;
@@ -365,7 +365,11 @@ Checksum writeToZip(const Item *source, long long start, long long end, zipFile 
     char buf[1024*128];
     int desired = (int)min((long long)sizeof(buf), end - pos);
     int rv = shunt->read(buf, desired);
-    CHECK(rv == desired);
+    if(rv != desired) {
+      printf("rv isn't desired! %d, %d\n", rv, desired);
+      printf("in the middle %s\n", outfname.c_str());
+      CHECK(0);
+    }
     pos += rv;
     zipWriteInFileInZip(dest, buf, rv);
     SHA1_Update(&c, buf, rv);
@@ -380,7 +384,7 @@ Checksum writeToZip(const Item *source, long long start, long long end, zipFile 
 
 long long filesize(const string &fsz) {
   struct stat stt;
-  CHECK(!stat(fsz.c_str(), &stt));
+  CHECK(!lstat(fsz.c_str(), &stt));
   return stt.st_size;
 }
 
@@ -455,13 +459,13 @@ void ArchiveState::doInst(const Instruction &inst, int tversion) {
     zfi.external_fa = 0;
     if(inst.type == TYPE_APPEND) {
       CHECK(!zipOpenNewFileInZip(archivefile, inst.append_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
-      Checksum rvx = writeToZip(inst.append_source, newstate->findItem(inst.append_path)->size(), inst.append_size, archivefile);
+      Checksum rvx = writeToZip(inst.append_source, newstate->findItem(inst.append_path)->size(), inst.append_size, archivefile, inst.append_path.c_str());
       CHECK(rvx == inst.append_checksum);
       CHECK(!zipCloseFileInZip(archivefile));
     } else {
       CHECK(inst.type == TYPE_STORE);
       CHECK(!zipOpenNewFileInZip(archivefile, inst.store_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
-      Checksum rvx = writeToZip(inst.store_source, 0, inst.store_size, archivefile);
+      Checksum rvx = writeToZip(inst.store_source, 0, inst.store_size, archivefile, inst.store_path.c_str());
       CHECK(rvx == inst.store_source->checksumPart(inst.store_size));  // since this is where the "checksum" comes from in the file
       CHECK(!zipCloseFileInZip(archivefile));
     }
@@ -861,6 +865,8 @@ int main(int argc, char **argv) {
       curstate = StringPrintf("states/%08d", curstateid);
       nextstate = StringPrintf("states/%08d", curstateid + 1);
     }
+    
+    CHECK(inf.first == -1 || inf.first == curstateid);
     
     State origstate;
     origstate.readFile(curstate);
