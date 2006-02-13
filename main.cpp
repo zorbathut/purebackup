@@ -414,13 +414,13 @@ private:
   string origstate;
 };
 
-const int usedperitem = 500;
-
 void ArchiveState::doInst(const Instruction &inst, int tversion) {
   
   used += usedperitem;
   
-  if(archivemode != -1 && archivemode != inst.type) {
+  CHECK(inst.size() < 1900 * 1024 * 1024);  // fix this.
+  
+  if(archivemode != -1 && (archivemode != inst.type || (filesize(fname) + inst.size() > 1900 * 1024 * 1024))) {
     // We're not appending to this archive anymore, so close it
     CHECK(!zipClose(archivefile, NULL));
     archivemode = -1;
@@ -536,15 +536,7 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
     long long tused = ars.getCSize() + usedperitem;
     printf("%lld of %lld written (%.1f%%)\r", tused, size, (double)tused / size * 100);
     fflush(stdout);
-    long long nextitem;
-    if(inst[i].type == TYPE_APPEND) {
-      nextitem = inst[i].append_size - newstate->findItem(inst[i].append_path)->size();
-    } else if(inst[i].type == TYPE_STORE) {
-      nextitem = inst[i].store_size;
-    } else {
-      nextitem = usedperitem;
-    }
-    if(tused + nextitem > size && size - tused > (1<<20) && (inst[i].type == TYPE_APPEND || inst[i].type == TYPE_STORE)) {
+    if(tused + inst[i].size() > size && size - tused > (1<<20) && (inst[i].type == TYPE_APPEND || inst[i].type == TYPE_STORE)) {
       // We've got some space left, so let's see what we can do with it
       // This code kind of relies on the "fact" that State won't have been changed yet with an Append or a Store
       // This whole thing's really kind of hacky, I suppose.
@@ -552,6 +544,7 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
       if(inst[i].type == TYPE_APPEND) {
         Instruction ninst = inst[i];
         ninst.append_size = newstate->findItem(ninst.append_path)->size() + (size - tused);
+        ninst.append_begin = newstate->findItem(ninst.append_path)->size();
         CHECK(ninst.append_size < inst[i].append_size);
         ninst.append_checksum = ninst.append_source->checksumPart(ninst.append_size);
         ars.doInst(ninst, tversion);
@@ -564,7 +557,7 @@ void generateArchive(const vector<Instruction> &inst, State *newstate, const str
       }
       dprintf("Done nasty half-instruction\n");
       break;
-    } else if(tused + nextitem > size) {
+    } else if(tused + inst[i].size() > size) {
       break;
     } else {
       ars.doInst(inst[i], tversion);
@@ -596,9 +589,10 @@ pair<int, long long> inferDiscInfo() {
   // And for a third thing, we basically, essentially, don't know anything
   // Why the hell do these tools suck so much?
   
-  //const string drive = "/cygdrive/d";
-  const string drive = "/cygdrive/c/werk/sea/purebackup/temp";
-  const long long drivesize = 4600ll*1024*1024;
+  const string drive = "/cygdrive/d";
+  //const string drive = "/cygdrive/c/werk/sea/purebackup/temp";
+  //const long long drivesize = 40*1024*1024 + getTotalSizeUsed(drive);
+  const long long drivesize = 4480ll*1024*1024;
   
   long long usedsize = getTotalSizeUsed(drive);
   printf("%lld bytes used\n", usedsize);
@@ -840,14 +834,6 @@ int main(int argc, char **argv) {
     printf("Reading config\n");
     readConfig("purebackup.conf");
     
-    printf("Scanning items\n");
-    scanPaths();
-    
-    printf("Dumping items\n");
-    map<string, Item> realitems;
-    getRoot()->dumpItems(&realitems, "");
-    dprintf("%d items found\n", realitems.size());
-    
     int curstateid;
     string curstate;
     string nextstate;
@@ -867,6 +853,14 @@ int main(int argc, char **argv) {
     }
     
     CHECK(inf.first == -1 || inf.first == curstateid);
+    
+    printf("Scanning items\n");
+    scanPaths();
+    
+    printf("Dumping items\n");
+    map<string, Item> realitems;
+    getRoot()->dumpItems(&realitems, "");
+    dprintf("%d items found\n", realitems.size());
     
     State origstate;
     origstate.readFile(curstate);
@@ -912,6 +906,9 @@ int main(int argc, char **argv) {
     
     printf("Starting examining\n");
     
+    long long totcomsize = 0;
+    bool earlyterm = false;
+    
     int ltime = 0;
     
     int itpos = 0;
@@ -920,12 +917,18 @@ int main(int argc, char **argv) {
     // citemsizemap is the same, only organized by size
     for(set<string>::iterator itr = ftc.begin(); itr != ftc.end(); itr++) {
       if(ltime != time(NULL)) {
-        printf("%d/%d files examined, %d/%d/%d, %lld bytes read from disk, looking at %s now\r", itpos, ftc.size(), if_presig, if_mid, if_full, cssi, itr->c_str());
+        printf("%d/%d files, %d/%d/%d, %lld read, %lld filled, now %s\r", itpos, ftc.size(), if_presig, if_mid, if_full, cssi, totcomsize, itr->c_str());
         ltime = time(NULL);
       }
       itpos++;
       fflush(stdout);
       
+      if(totcomsize > inf.second * 2) {
+        printf("Archive is getting too big, splitting\n");
+        earlyterm = true;
+        break;
+      }
+  
       // If it's null, it doesn't exist in the real items because we couldn't scan it. However, if we're iterating over it, it *must* exist.
       // Therefore, it must exist in the original items.
       CHECK(!(isNulled(*itr) && !citem.count(make_pair(false, *itr))));
@@ -964,6 +967,7 @@ int main(int argc, char **argv) {
             ti.depends.push_back(make_pair(false, *itr)); // if this matters, something is hideously wrong
             ti.touch_path = *itr;
             ti.touch_meta = ite.metadata();
+            totcomsize += ti.size();
             inst.push_back(ti);
             got = true;
           } else if(ite.size() > pite.size() && identicalFile(ite, pite, pite.size())) {
@@ -976,9 +980,11 @@ int main(int argc, char **argv) {
             ti.removes.push_back(make_pair(false, *itr));
             ti.append_path = *itr;
             ti.append_size = ite.size();
+            ti.append_begin = pite.size();
             ti.append_meta = ite.metadata();
             ti.append_checksum = ite.checksum();
             ti.append_source = &ite;
+            totcomsize += ti.size();
             inst.push_back(ti);
             got = true;
           }
@@ -1000,6 +1006,7 @@ int main(int argc, char **argv) {
               ti.copy_source = sli[k].second;
               ti.copy_dest = *itr;
               ti.copy_dest_meta = ite.metadata();
+              totcomsize += ti.size();
               inst.push_back(ti);
               got = true;
               break;
@@ -1019,6 +1026,7 @@ int main(int argc, char **argv) {
           ti.store_size = ite.size();
           ti.store_meta = ite.metadata();
           ti.store_source = &ite;
+          totcomsize += ti.size();
           inst.push_back(ti);
           got = true;
         }
@@ -1035,6 +1043,7 @@ int main(int argc, char **argv) {
         ti.type = TYPE_DELETE;
         ti.delete_path = *itr;
         ti.removes.push_back(make_pair(false, *itr));
+        totcomsize += ti.size();
         inst.push_back(ti);
       }
     }
@@ -1065,7 +1074,7 @@ int main(int argc, char **argv) {
       printf("Total of %lld bytes left! (%lldmb)\n", archsize, archsize >> 20);
     }
     
-    //system("rm -rf temp");  // this is obviously dangerous, dur
+    system("rm -rf temp");  // this is obviously dangerous, dur
     system("mkdir temp");
     
     printf("Generating archive of at most %lld bytes\n", inf.second);
@@ -1078,7 +1087,7 @@ int main(int argc, char **argv) {
       string destpath = StringPrintf("temp/%08d", curstateid + 1);
       system(StringPrintf("mkdir %s", destpath.c_str()).c_str());
       
-      generateArchive(inst, &newstate, curstate, inf.second, destpath, &spaceleft, curstateid + 1);
+      generateArchive(inst, &newstate, curstate, inf.second - filesize("temp/manifest"), destpath, &spaceleft, curstateid + 1);
     } else {
       // We don't. (Duh.)
       CHECK(inf.first == curstateid);
@@ -1087,6 +1096,9 @@ int main(int argc, char **argv) {
       
       generateArchive(inst, &newstate, curstate, inf.second, destpath, &spaceleft, curstateid + 1);
     }
+    
+    if(earlyterm)
+      CHECK(!spaceleft);
     
     printf("Done genarch\n");
   

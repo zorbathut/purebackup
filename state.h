@@ -28,6 +28,8 @@ using namespace std;
 enum { TYPE_CREATE, TYPE_ROTATE, TYPE_DELETE, TYPE_COPY, TYPE_APPEND, TYPE_STORE, TYPE_TOUCH, TYPE_END };
 const string type_strs[] = { "CREATE", "ROTATE", "DELETE", "COPY", "APPEND", "STORE", "TOUCH" };
 
+const int usedperitem = 500;
+
 class Instruction {
 public:
   vector<pair<bool, string> > depends;
@@ -49,6 +51,7 @@ public:
 
   string append_path;
   long long append_size;
+  long long append_begin;
   Metadata append_meta;
   Checksum append_checksum;
   const Item *append_source;
@@ -63,6 +66,8 @@ public:
 
   string textout() const;
   string processString() const;
+  
+  const long long size() const;
 };
 
 class State {

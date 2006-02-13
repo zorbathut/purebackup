@@ -137,7 +137,10 @@ bool isAlphanumeric(const string &str) {
 }
 
 char toHexChar(int in) {
-  CHECK(in >= 0 && in < 16);
+  if(in < 0 || in >= 16) {
+    printf("Hex char failure: attempt to parse %d\n", in);
+    CHECK(0);
+  }
   if(in < 10)
     return in + '0';
   else
@@ -156,7 +159,7 @@ void appendEscapedStr(string *stt, const string &esc) {
     } else if(esc[i] >= 32 && esc[i] < 127) {
       (*stt) += esc[i];
     } else {
-      (*stt) += string("\\x") + toHexChar(esc[i] / 16) + toHexChar(esc[i] % 16);
+      (*stt) += string("\\x") + toHexChar((unsigned char)esc[i] / 16) + toHexChar((unsigned char)esc[i] % 16);
     }
   }
   (*stt) += '"';
@@ -199,8 +202,8 @@ bool isHex(char pt) {
 
 int parseHex(const char **pt) {
   CHECK(isHex(**pt));
-  if(isHex(*(*pt + 1))) {
-    int rv = hexDigit(**pt) * 16 + isHex(*(*pt + 1));
+  if(isHex(*((*pt) + 1))) {
+    int rv = hexDigit(**pt) * 16 + hexDigit(*((*pt) + 1));
     (*pt) += 2;
     return rv;
   } else {
@@ -227,6 +230,7 @@ string parseQuotedWord(const char **pt) {
       } else if(**pt == 'x') {
         (*pt)++;
         oot += parseHex(pt);
+        (*pt)--;  // it'll be bumped forward by the later code
       } else {
         CHECK(0);
       }

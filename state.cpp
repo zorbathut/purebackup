@@ -171,3 +171,13 @@ string Instruction::processString() const {
   }
   return putkvDataInlineString(kvd);
 }
+
+const long long Instruction::size() const {
+  if(type == TYPE_STORE) {
+    return usedperitem + store_size;
+  } else if(type == TYPE_APPEND) {
+    return usedperitem + append_size - append_begin;
+  } else {
+    return usedperitem;
+  }
+}
