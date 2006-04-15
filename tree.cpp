@@ -133,7 +133,10 @@ void MountTree::scan() {
         printf("%d scanned\r", scanned);
         fflush(stdout);
       }
-      CHECK(links[fils[i].itemname].type == MTT_UNINITTED || links[fils[i].itemname].type == MTT_IMPLIED);
+      if(links[fils[i].itemname].type != MTT_UNINITTED && links[fils[i].itemname].type != MTT_IMPLIED) {
+        printf("Type is %d at %s which is WRONG\n", links[fils[i].itemname].type, fils[i].full_path.c_str());
+        CHECK(0);
+      }
       if(fils[i].null) {
         links[fils[i].itemname] = MountTree();    // we need to obliterate this entirely
         links[fils[i].itemname].type = MTT_NULL;  // TODO: Maybe we don't want to, if there's masked stuff beneath it?

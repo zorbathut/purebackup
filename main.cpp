@@ -384,7 +384,10 @@ Checksum writeToZip(const Item *source, long long start, long long end, zipFile 
 
 long long filesize(const string &fsz) {
   struct stat stt;
-  CHECK(!lstat(fsz.c_str(), &stt));
+  if(lstat(fsz.c_str(), &stt)) {
+    printf("Couldn't stat %s\n", fsz.c_str());
+    CHECK(0);
+  }
   return stt.st_size;
 }
 
@@ -409,6 +412,9 @@ private:
   string destpath;
 
   long long used;
+  long long data;
+  int entries;
+
   int archives;
 
   string origstate;
@@ -449,6 +455,8 @@ void ArchiveState::doInst(const Instruction &inst, int tversion) {
         kvd.kv["source"] = pfname;
         fprintf(proc, "%s\n", putkvDataInlineString(kvd).c_str());
       }
+      
+      entries++;
   
     }
     
@@ -459,14 +467,19 @@ void ArchiveState::doInst(const Instruction &inst, int tversion) {
     zfi.external_fa = 0;
     if(inst.type == TYPE_APPEND) {
       CHECK(!zipOpenNewFileInZip(archivefile, inst.append_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
+      data += inst.append_size - newstate->findItem(inst.append_path)->size();
       Checksum rvx = writeToZip(inst.append_source, newstate->findItem(inst.append_path)->size(), inst.append_size, archivefile, inst.append_path.c_str());
       CHECK(rvx == inst.append_checksum);
       CHECK(!zipCloseFileInZip(archivefile));
     } else {
       CHECK(inst.type == TYPE_STORE);
       CHECK(!zipOpenNewFileInZip(archivefile, inst.store_path.c_str() + 1, &zfi, NULL, 0, NULL, 0, NULL, Z_DEFLATED, Z_DEFAULT_COMPRESSION));
+      data += inst.store_size;
       Checksum rvx = writeToZip(inst.store_source, 0, inst.store_size, archivefile, inst.store_path.c_str());
-      CHECK(rvx == inst.store_source->checksumPart(inst.store_size));  // since this is where the "checksum" comes from in the file
+      if(rvx != inst.store_source->checksumPart(inst.store_size)) { // since this is where the "checksum" comes from in the file
+        printf("%s checksum mismatch\n", inst.store_path.c_str());
+        CHECK(0);
+      }
       CHECK(!zipCloseFileInZip(archivefile));
     }
     
@@ -480,6 +493,7 @@ void ArchiveState::doInst(const Instruction &inst, int tversion) {
   }
   
   newstate->process(inst, tversion);
+  entries++;
 
 }
 
@@ -501,6 +515,9 @@ ArchiveState::ArchiveState(const string &in_origstate, State *in_newstate, const
   archivefile = NULL;
   
   used = 0;
+  data = 0;
+  entries = 0;
+  
   archives = 0;
   
   origstate = in_origstate;
@@ -512,7 +529,7 @@ ArchiveState::~ArchiveState() {
     used += filesize(fname);
   }
   
-  printf("Closing archive. Expected size: %lld\n", used);
+  printf("Closing archive. Expected size: %lld. Data stored: %lld (plus %d entries of overhead). Compression: %f%%\n", used, data, entries, (1.0 - (double)used / data) * 100);
   
   fclose(proc);
   
@@ -592,7 +609,7 @@ pair<int, long long> inferDiscInfo() {
   const string drive = "/cygdrive/d";
   //const string drive = "/cygdrive/c/werk/sea/purebackup/temp";
   //const long long drivesize = 40*1024*1024 + getTotalSizeUsed(drive);
-  const long long drivesize = 4480ll*1024*1024;
+  const long long drivesize = 4482ll*1024*1024;
   
   long long usedsize = getTotalSizeUsed(drive);
   printf("%lld bytes used\n", usedsize);
@@ -611,7 +628,7 @@ pair<int, long long> inferDiscInfo() {
   vector<int> dirnames;
   
   for(int i = 0; i < dlo.size(); i++) {
-    if(dlo[i].itemname == "manifest") {
+    if(dlo[i].itemname == "manifest.gz") {
       CHECK(!dlo[i].directory);
       CHECK(!foundManifest);
       foundManifest = true;
@@ -628,6 +645,8 @@ pair<int, long long> inferDiscInfo() {
     
     CHECK(0);
   }
+  
+  CHECK(foundManifest || !dirnames.size());
   
   sort(dirnames.begin(), dirnames.end());
   
@@ -923,11 +942,13 @@ int main(int argc, char **argv) {
       itpos++;
       fflush(stdout);
       
+      /*
       if(totcomsize > inf.second * 2) {
         printf("Archive is getting too big, splitting\n");
         earlyterm = true;
         break;
       }
+      */
   
       // If it's null, it doesn't exist in the real items because we couldn't scan it. However, if we're iterating over it, it *must* exist.
       // Therefore, it must exist in the original items.
@@ -938,26 +959,15 @@ int main(int argc, char **argv) {
         const Item &ite = realitems.find(*itr)->second;
         bool got = false;
         
-        // If either of these are true, we don't have adequate data - if it's null we're saving it from deletion,
-        // if it's merely unreadable we're simply ignoring it
-        if(isNulled(*itr) || !ite.isReadable()) {
-          if(citem.count(make_pair(false, *itr))) {
-            fi.creates.push_back(make_pair(true, *itr));
-            got = true;
-          } else {
-            continue;
-          }
-        }
-        
         // First, we check to see if it's the same file as existed before
         if(!got && citem.count(make_pair(false, *itr))) {
           const Item &pite = citem.find(make_pair(false, *itr))->second;
-          if(ite.size() == pite.size() && ite.metadata() == pite.metadata()) {
+          if(isNulled(*itr) || ite.size() == pite.size() && ite.metadata() == pite.metadata()) {
             // It's identical!
             //printf("Preserve file %s\n", itr->c_str());
             fi.creates.push_back(make_pair(true, *itr));
             got = true;
-          } else if(ite.size() == pite.size() && identicalFile(ite, pite)) {
+          } else if(ite.size() == pite.size() && ite.isChecksummable() && identicalFile(ite, pite)) {
             // It's touched!
             CHECK(ite.metadata() != pite.metadata());
             //printf("Touching file %s\n", itr->c_str());
@@ -970,8 +980,10 @@ int main(int argc, char **argv) {
             totcomsize += ti.size();
             inst.push_back(ti);
             got = true;
-          } else if(ite.size() > pite.size() && identicalFile(ite, pite, pite.size())) {
+          } else if(ite.size() > pite.size() && pite.size() > 0 && ite.isChecksummable() && identicalFile(ite, pite, pite.size())) {
             // It's appended!
+            // The pite.size() check is so we don't claim a file going from 0 bytes to more is "appended"
+            // Technically that's valid, but it's a bit ugly and so I decided to make it not happen. :)
             //printf("Appendination on %s, dude!\n", itr->c_str());
             Instruction ti;
             ti.type = TYPE_APPEND;
@@ -987,6 +999,19 @@ int main(int argc, char **argv) {
             totcomsize += ti.size();
             inst.push_back(ti);
             got = true;
+          }
+        }
+        
+        // If either of these are true, we don't have adequate data - if it's null we're saving it from deletion,
+        // if it's merely unreadable we're simply ignoring it
+        if(!got) {
+          if(isNulled(*itr) || !ite.isReadable()) {
+            if(citem.count(make_pair(false, *itr))) {
+              fi.creates.push_back(make_pair(true, *itr));
+              got = true;
+            } else {
+              continue;
+            }
           }
         }
         
@@ -1084,10 +1109,11 @@ int main(int argc, char **argv) {
     if(inf.first == -1) {
       // We need to copy our original state to the root, then create our first patch
       system(StringPrintf("cp %s %s", curstate.c_str(), "temp/manifest").c_str()); // note: this is buggy and probably a security hole
+      system("gzip temp/manifest");
       string destpath = StringPrintf("temp/%08d", curstateid + 1);
       system(StringPrintf("mkdir %s", destpath.c_str()).c_str());
       
-      generateArchive(inst, &newstate, curstate, inf.second - filesize("temp/manifest"), destpath, &spaceleft, curstateid + 1);
+      generateArchive(inst, &newstate, curstate, inf.second - filesize("temp/manifest.gz"), destpath, &spaceleft, curstateid + 1);
     } else {
       // We don't. (Duh.)
       CHECK(inf.first == curstateid);

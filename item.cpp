@@ -93,7 +93,10 @@ Checksum Item::signature() const {
 }
 
 Checksum Item::signaturePart(long long len) const {
-  CHECK(isReadable());
+  if(!isReadable()) {
+    printf("Isn't readable: %s", local_path.c_str());
+    CHECK(0);
+  }
   
   for(int i = 0; i < sss.size(); i++) {
     if(sss[i].first == len)
@@ -139,7 +142,10 @@ Checksum Item::checksum() const {
 extern long long cssi;
 
 Checksum Item::checksumPart(long long len) const {
-  CHECK(isReadable());
+  if(!isReadable()) {
+    printf("Isn't readable: %s", local_path.c_str());
+    CHECK(0);
+  }
 
   for(int i = 0; i < css.size(); i++) {
     if(css[i].first == len)
@@ -210,6 +216,10 @@ bool Item::isReadable() const {
   }
   return readable == 1;
 };
+
+bool Item::isChecksummable() const {
+  return css.size() || isReadable();
+}
 
 string Item::toString() const {
   return StringPrintf("%lld %lld %s", size(), metadata().timestamp, checksum().toString().c_str());

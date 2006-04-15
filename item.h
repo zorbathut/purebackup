@@ -100,6 +100,7 @@ public:
 
   bool exists() const { return type != MTI_NONEXISTENT; }
   bool isReadable() const;
+  bool isChecksummable() const;
 
   string toString() const;
 

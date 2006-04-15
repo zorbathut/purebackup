@@ -32,7 +32,7 @@ clean:
 	$(CPP) $(CPPFLAGS) -c -g -Wa,-a,-ad $< > $@
 
 %.d: %.cpp makefile
-	bash -ec '$(CPP) $(CPPFLAGS) -MM $< | sed "s*$*.o*$*.o $@*g" > $@'
+	bash -ec '$(CPP) $(CPPFLAGS) -MM $< | sed "s!$*.o!$*.o $@!g" > $@'
 
 %.d: %.c makefile
-	bash -ec '$(C) $(CFLAGS) -MM $< | sed "s*$*.o*$*.o $@*g" > $@'
+	bash -ec '$(C) $(CFLAGS) -MM $< | sed "s!$*.o!$*.o $@!g" > $@'

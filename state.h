@@ -25,8 +25,8 @@
 
 using namespace std;
 
-enum { TYPE_CREATE, TYPE_ROTATE, TYPE_DELETE, TYPE_COPY, TYPE_APPEND, TYPE_STORE, TYPE_TOUCH, TYPE_END };
-const string type_strs[] = { "CREATE", "ROTATE", "DELETE", "COPY", "APPEND", "STORE", "TOUCH" };
+enum { TYPE_CREATE, TYPE_ROTATE, TYPE_DELETE, TYPE_COPY, TYPE_TOUCH, TYPE_APPEND, TYPE_STORE, TYPE_END };
+const string type_strs[] = { "CREATE", "ROTATE", "DELETE", "COPY", "TOUCH", "APPEND", "STORE" };
 
 const int usedperitem = 500;
 

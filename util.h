@@ -34,6 +34,7 @@ public:
 };
 
 bool operator==(const Checksum &lhs, const Checksum &rhs);
+inline bool operator!=(const Checksum &lhs, const Checksum &rhs) { return !(lhs == rhs); }
 
 long long atoll(const char *);
 Checksum atochecksum(const char *);
