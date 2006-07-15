@@ -94,7 +94,7 @@ Checksum Item::signature() const {
 
 Checksum Item::signaturePart(long long len) const {
   if(!isReadable()) {
-    printf("Isn't readable: %s", local_path.c_str());
+    printf("Isn't readable: %s\n", local_path.c_str());
     CHECK(0);
   }
   

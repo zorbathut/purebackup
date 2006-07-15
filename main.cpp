@@ -305,7 +305,12 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
     if(!tcl)
       break;
     printf("Starting pass, %d instructions left\n", tcl);
+    bool didinexpensive = false;
     for(int i = 0; i < TYPE_END; i++) {
+      if(didinexpensive && type_expensive[i]) {
+        printf("Skipping mode due to expensive commands, will return\n");
+        continue;
+      }
       vector<Instruction> buckupd;
       for(int j = 0; j < buckets[i].size(); j++) {
         bool good = true;
@@ -331,8 +336,11 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
           CHECK(!live.count(ite));
           live.insert(buckets[i][j].creates[k]);
         }
-        if(i != TYPE_CREATE)  // these don't get output
+        if(i != TYPE_CREATE) {  // these don't get output
           kinstr.push_back(buckets[i][j]);
+          if(!type_expensive[i])
+            didinexpensive = true;
+        }
       }
       buckets[i].swap(buckupd);
     }
@@ -606,7 +614,7 @@ pair<int, long long> inferDiscInfo() {
   // And for a third thing, we basically, essentially, don't know anything
   // Why the hell do these tools suck so much?
   
-  const string drive = "/cygdrive/d";
+  const string drive = "/cygdrive/m";
   //const string drive = "/cygdrive/c/werk/sea/purebackup/temp";
   //const long long drivesize = 40*1024*1024 + getTotalSizeUsed(drive);
   const long long drivesize = 4482ll*1024*1024;
@@ -954,6 +962,8 @@ int main(int argc, char **argv) {
       // Therefore, it must exist in the original items.
       CHECK(!(isNulled(*itr) && !citem.count(make_pair(false, *itr))));
       
+      //dprintf("Processing %s", itr->c_str());
+      
       // If it's null, we pretend it exists and is identical to what we currently have, which involves going through this section.
       if(realitems.count(*itr) || isNulled(*itr)) {
         const Item &ite = realitems.find(*itr)->second;
@@ -1017,10 +1027,14 @@ int main(int argc, char **argv) {
         
         // Okay, now we see if it's been copied from somewhere
         if(!got) {
+          CHECK(ite.isChecksummable());
           const vector<pair<bool, string> > &sli = citemsizemap[ite.size()];
           for(int k = 0; k < sli.size(); k++) {
             CHECK(ite.size() == citem[sli[k]].size());
-            if(identicalFile(ite, citem[sli[k]])) {
+            
+            // It's possible for a nulled or unreadable item to get pushed into the citem map. If so, we can't necessarily compare it.
+            // There may be a better way to do this.
+            if(citem[sli[k]].isChecksummable() && identicalFile(ite, citem[sli[k]])) {
               //printf("Holy crapcock! Copying %s from %s:%d! MADNESS\n", itr->c_str(), sli[k].second.c_str(), sli[k].first);
               Instruction ti;
               ti.type = TYPE_COPY;
@@ -1041,6 +1055,7 @@ int main(int argc, char **argv) {
         
         // And now we give up and just store it
         if(!got) {
+          CHECK(ite.isReadable());
           //printf("Storing %s from GALACTIC ETHER\n", itr->c_str());
           Instruction ti;
           ti.type = TYPE_STORE;

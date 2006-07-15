@@ -167,7 +167,7 @@ void MountTree::dumpItems(map<string, Item> *items, string cpath) const {
     (*items)[cpath] = item;
   } else if(type == MTT_MASKED || type == MTT_NULL) {
   } else {
-    printf("Type is %d\n", type);
+    printf("Type is %d at %s\n", type, cpath.c_str());
     CHECK(0);
   }
 }
