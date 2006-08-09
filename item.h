@@ -76,6 +76,8 @@ private:
   FILE *local_file;
 #endif
 
+  string fname;
+
   ItemShunt();
   ItemShunt(const ItemShunt &is); // do not implement
   void operator=(const ItemShunt &is); // do not implement

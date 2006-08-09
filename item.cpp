@@ -45,7 +45,10 @@ void ItemShunt::seek(long long pos) {
 }
 int ItemShunt::read(char *buffer, int len) {
   DWORD out;
-  CHECK(ReadFile(local_file, buffer, len, &out, NULL));
+  if(!ReadFile(local_file, buffer, len, &out, NULL)) {
+    printf("Problem with reading from %s\n", fname.c_str());
+    CHECK(0);
+  }
   return out;
 }
 
@@ -58,6 +61,7 @@ ItemShunt* ItemShunt::LocalFile(const string &local_fname) {
   
   ItemShunt *isr = new ItemShunt;
   isr->local_file = local_file;
+  isr->fname = local_fname;
   return isr;
 }
 ItemShunt::ItemShunt() {
