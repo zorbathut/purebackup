@@ -113,8 +113,8 @@ public:
   Item();
 
 private:
-  mutable vector<pair<int, Checksum> > css;
-  mutable vector<pair<int, Checksum> > sss;
+  mutable vector<pair<long long, Checksum> > css;
+  mutable vector<pair<long long, Checksum> > sss;
 
   int type;
   long long p_size;
@@ -124,10 +124,11 @@ private:
 
   string local_path;
 
+/*
   string ssh_user;
   string ssh_pass;
   string ssh_host;
-  string ssh_path;
+  string ssh_path;*/
 
   set<int> needed_versions;
 

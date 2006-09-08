@@ -156,7 +156,12 @@ Checksum Item::checksumPart(long long len) const {
       return css[i].second;
   }
   
-  CHECK(type == MTI_LOCAL);
+  if(type != MTI_LOCAL) {
+    printf("Invalid type %d, size %lld\n", type, size());
+    for(int i = 0; i < css.size(); i++)
+      printf("Css %lld\n", css[i].first);
+    CHECK(0);
+  }
   //printf("Doing full checksum of %s\n", local_path.c_str());
   
   long long bytu = 0;
@@ -248,6 +253,7 @@ Item Item::MakeOriginal(long long size, const Metadata &meta, const Checksum &ch
   return item;
 }
 
+/*
 Item Item::MakeSsh(const string &user, const string &pass, const string &host, const string &full_path, long long size, const Metadata &meta) {
   Item item;
   item.type = MTI_SSH;
@@ -258,7 +264,7 @@ Item Item::MakeSsh(const string &user, const string &pass, const string &host, c
   item.ssh_host = host;
   item.ssh_path = full_path;
   return item;
-}
+}*/
 
 Item::Item() {
   type = MTI_NONEXISTENT;

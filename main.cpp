@@ -541,7 +541,10 @@ ArchiveState::~ArchiveState() {
   
   fclose(proc);
   
+  printf("Writing state\n");
   newstate->writeOut(StringPrintf("%s/newstate", destpath.c_str()));
+  printf("Writing state\n");
+  
   system(StringPrintf("diff %s %s/newstate > %s/statediff", origstate.c_str(), destpath.c_str(), destpath.c_str()).c_str());
   unlink(StringPrintf("%s/newstate", destpath.c_str()).c_str());
 }

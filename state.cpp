@@ -97,6 +97,7 @@ void State::process(const Instruction &in, int tversion) {
 void State::writeOut(const string &fn) const {
   ofstream ofs(fn.c_str());
   for(map<string, Item>::const_iterator itr = items.begin(); itr != items.end(); itr++) {
+    //dprintf("Processing %s\n", itr->first.c_str());
     kvData kvd;
     kvd.category = "file";
     kvd.kv["name"] = itr->first;
