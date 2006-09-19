@@ -29,7 +29,7 @@ enum { TYPE_CREATE, TYPE_ROTATE, TYPE_DELETE, TYPE_COPY, TYPE_TOUCH, TYPE_APPEND
 const string type_strs[] = { "CREATE", "ROTATE", "DELETE", "COPY", "TOUCH", "APPEND", "STORE" };
 const bool type_expensive[] = {0, 0, 0, 0, 0, 1, 1};
 
-const int usedperitem = 500;
+const int usedperitem = 520;
 
 class Instruction {
 public:
