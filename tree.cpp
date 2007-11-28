@@ -36,6 +36,7 @@ bool MountTree::checkSanity() const {
         return false;
       if(!itr->second.checkSanity())
         return false;
+      printf("%s\n", itr->first.c_str());
       if(type == MTT_VIRTUAL) {
         CHECK(itr->second.type == MTT_VIRTUAL || itr->second.type == MTT_FILE || itr->second.type == MTT_SSH || itr->second.type == MTT_NULL);
       } else if(type == MTT_FILE) {

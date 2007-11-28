@@ -68,7 +68,9 @@ public:
   string textout() const;
   string processString() const;
   
-  const long long size() const;
+  long long size() const;
+  
+  int bytesused() const;
 };
 
 class State {

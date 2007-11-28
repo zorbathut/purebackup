@@ -173,7 +173,7 @@ string Instruction::processString() const {
   return putkvDataInlineString(kvd);
 }
 
-const long long Instruction::size() const {
+long long Instruction::size() const {
   if(type == TYPE_STORE) {
     return usedperitem + store_size;
   } else if(type == TYPE_APPEND) {
@@ -181,4 +181,22 @@ const long long Instruction::size() const {
   } else {
     return usedperitem;
   }
+}
+
+int getsize(const vector<pair<bool, string> > &dt) {
+  int ts  = 0;
+  for(int i = 0; i < dt.size(); i++)
+    ts += dt[i].second.size() + sizeof(dt[0]);
+  return ts;
+}
+
+int getsize(const vector<pair<string, Metadata> > &dt) {
+  int ts  = 0;
+  for(int i = 0; i < dt.size(); i++)
+    ts += dt[i].first.size() + sizeof(dt[0]);
+  return ts;
+}
+
+int Instruction::bytesused() const {
+  return getsize(depends) + getsize(removes) + getsize(creates) + getsize(rotate_paths) + create_path.size() + delete_path.size() + copy_source.size() + copy_dest.size() + append_path.size() + store_path.size() + touch_path.size() + sizeof(*this);
 }

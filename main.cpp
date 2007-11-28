@@ -281,7 +281,7 @@ vector<Instruction> deloop(const vector<Instruction> &inst) {
   return inst;
 }
 
-vector<Instruction> sortInst(vector<Instruction> oinst) {
+void sortInst(vector<Instruction> &oinst) {
   oinst = deloop(oinst);
   
   vector<Instruction> buckets[TYPE_END];
@@ -294,9 +294,9 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
   }
   CHECK(buckets[0].size() == 1);
   
+  vector<Instruction>().swap(oinst);  // deallocate
+  
   set<pair<bool, string> > live;
-
-  vector<Instruction> kinstr;
   
   while(1) {
     int tcl = 0;
@@ -304,7 +304,13 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
       tcl += buckets[i].size();
     if(!tcl)
       break;
-    printf("Starting pass, %d instructions left\n", tcl);
+    printf("Starting pass, %d instructions left. Instruction size is %d, oinst is %d\n", tcl, sizeof(Instruction), oinst.size());
+    {
+      int tsize = 0;
+      for(int i = 0; i < oinst.size(); i++)
+        tsize += oinst[i].bytesused();
+      printf("ts is %d\n", tsize);
+    }
     bool didinexpensive = false;
     for(int i = 0; i < TYPE_END; i++) {
       if(didinexpensive && type_expensive[i]) {
@@ -337,7 +343,7 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
           live.insert(buckets[i][j].creates[k]);
         }
         if(i != TYPE_CREATE) {  // these don't get output
-          kinstr.push_back(buckets[i][j]);
+          oinst.push_back(buckets[i][j]);
           if(!type_expensive[i])
             didinexpensive = true;
         }
@@ -348,8 +354,6 @@ vector<Instruction> sortInst(vector<Instruction> oinst) {
       tcl -= buckets[i].size();
     CHECK(tcl != 0);
   }
-
-  return kinstr;
 }
 
 Checksum writeToZip(const Item *source, long long start, long long end, zipFile dest, const string &outfname) {
@@ -1093,7 +1097,7 @@ int main(int argc, char **argv) {
     
     inst.push_back(fi);
     
-    inst = sortInst(inst);
+    sortInst(inst);
     
     State newstate = origstate;
     
