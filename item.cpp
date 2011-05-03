@@ -189,11 +189,13 @@ Checksum Item::checksumPart(long long len) const {
     } else {
       SHA1_Update(&c, buf, rv);
     }
-    bytu += rv;
+    
     if(rv != sizeof(buf)) {
       printf("Trying to read %lld from %s, only picked up %lld, last value %d!\n", len, local_path.c_str(), bytu + rv, rv);
       CHECK(0);
     }
+    
+    bytu += rv;
   }
   
   CHECK(0);
