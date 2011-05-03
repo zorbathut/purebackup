@@ -1,1 +1,5 @@
-I haven't bothered with a README yet - this is still in very, very early alpha.
+Purebackup is a backup program intended to back up your hard drive to simple, easily-readable destination files. It was developed when I was looking for a standalone backup utility, but was annoyed at the inner workings of every utility being a black box.
+
+Purebackup was used for several months, but eventually I got annoyed at it - even DVDs are really tough to back up to nowadays - and ended up using an online utility. It was also running into efficiency problems, hitting and exceeding the 2gb process memory cap. I think the idea has merit but the implementation was highly flawed.
+
+This project is mothballed, and posted largely for posterity's sake.
